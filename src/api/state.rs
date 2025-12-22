@@ -6,12 +6,14 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use strum::Display;
 
 use crate::checks::CheckResult;
 
 /// Execution status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum ExecutionStatus {
     /// Checks are currently running
     Running,
@@ -19,16 +21,6 @@ pub enum ExecutionStatus {
     Completed,
     /// Some checks failed
     Failed,
-}
-
-impl std::fmt::Display for ExecutionStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExecutionStatus::Running => write!(f, "running"),
-            ExecutionStatus::Completed => write!(f, "completed"),
-            ExecutionStatus::Failed => write!(f, "failed"),
-        }
-    }
 }
 
 /// Internal mutable state

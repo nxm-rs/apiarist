@@ -68,8 +68,7 @@ async fn results_handler(State(state): State<ApiState>) -> (StatusCode, Json<Res
 
     let status_code = match status {
         ExecutionStatus::Running => StatusCode::ACCEPTED,
-        ExecutionStatus::Completed => StatusCode::OK,
-        ExecutionStatus::Failed => StatusCode::OK, // Still return 200 for failed checks
+        ExecutionStatus::Completed | ExecutionStatus::Failed => StatusCode::OK,
     };
 
     (status_code, Json(ResultsResponse { status, results }))

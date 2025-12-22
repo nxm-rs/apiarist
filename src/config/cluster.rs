@@ -212,7 +212,7 @@ impl Config {
 mod tests {
     use super::*;
 
-    const SAMPLE_CONFIG: &str = r#"
+    const SAMPLE_CONFIG: &str = r"
 cluster:
   name: test-cluster
   bootnode:
@@ -231,7 +231,7 @@ checks:
     retries: 3
   peercount:
     enabled: false
-"#;
+";
 
     #[test]
     fn test_parse_config() {
