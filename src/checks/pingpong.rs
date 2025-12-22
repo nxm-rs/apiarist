@@ -39,7 +39,11 @@ impl Check for PingpongCheck {
         "Test peer connectivity with RTT measurement"
     }
 
-    async fn run(&self, ctx: &CheckContext, opts: &CheckOptions) -> Result<CheckResult, CheckError> {
+    async fn run(
+        &self,
+        ctx: &CheckContext,
+        opts: &CheckOptions,
+    ) -> Result<CheckResult, CheckError> {
         let start = Instant::now();
         let max_retries = opts.retries.max(1);
         let retry_delay = opts.retry_delay_or(Duration::from_secs(2));
@@ -63,7 +67,10 @@ impl Check for PingpongCheck {
                 Ok(addrs) => addrs.overlay,
                 Err(e) => {
                     warn!(node = %node_name, error = %e, "Failed to get node addresses");
-                    node_results.push(NodeResult::failed(&node_name, format!("Failed to get addresses: {}", e)));
+                    node_results.push(NodeResult::failed(
+                        &node_name,
+                        format!("Failed to get addresses: {}", e),
+                    ));
                     continue;
                 }
             };
@@ -73,7 +80,10 @@ impl Check for PingpongCheck {
                 Ok(p) => p,
                 Err(e) => {
                     warn!(node = %node_name, error = %e, "Failed to get peers");
-                    node_results.push(NodeResult::failed(&node_name, format!("Failed to get peers: {}", e)));
+                    node_results.push(NodeResult::failed(
+                        &node_name,
+                        format!("Failed to get peers: {}", e),
+                    ));
                     continue;
                 }
             };

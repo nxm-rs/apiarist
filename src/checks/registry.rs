@@ -6,8 +6,8 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::traits::Check;
 use super::PingpongCheck;
+use super::traits::Check;
 
 /// Global registry of all available checks
 pub static CHECKS: Lazy<HashMap<&'static str, Arc<dyn Check>>> = Lazy::new(|| {
