@@ -5,10 +5,10 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-use apiary::api::{start_api_server, ApiState};
-use apiary::checks::{registry::CHECKS, Check};
+use apiary::api::{ApiState, start_api_server};
+use apiary::checks::{Check, registry::CHECKS};
 use apiary::config::Config;
 
 /// Apiary - Where Swarm nodes go to get stress-tested
@@ -103,9 +103,7 @@ async fn main() -> Result<()> {
             api_port,
             timeout: _timeout,
             keep_alive,
-        } => {
-            run_checks(&config_path, check_filter.as_deref(), api_port, keep_alive).await
-        }
+        } => run_checks(&config_path, check_filter.as_deref(), api_port, keep_alive).await,
 
         Commands::Init { output } => init_config(&output),
 
@@ -114,7 +112,9 @@ async fn main() -> Result<()> {
             Ok(())
         }
 
-        Commands::Validate { config: config_path } => validate_config(&config_path),
+        Commands::Validate {
+            config: config_path,
+        } => validate_config(&config_path),
     }
 }
 

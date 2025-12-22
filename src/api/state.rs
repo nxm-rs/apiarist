@@ -128,9 +128,9 @@ impl ApiState {
             checks_failed: state.checks_failed,
             current_check: state.current_check.clone(),
             elapsed_ms: state.started_at.elapsed().as_millis() as u64,
-            duration_ms: state.completed_at.map(|t| {
-                t.duration_since(state.started_at).as_millis() as u64
-            }),
+            duration_ms: state
+                .completed_at
+                .map(|t| t.duration_since(state.started_at).as_millis() as u64),
         }
     }
 

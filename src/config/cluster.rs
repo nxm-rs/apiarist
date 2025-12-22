@@ -58,15 +58,12 @@ fn default_cluster_name() -> String {
 impl ClusterConfig {
     /// Create a CheckContext from this cluster configuration
     pub fn to_check_context(&self) -> Result<CheckContext, ConfigError> {
-        let bootnode = BeeClient::new(&self.bootnode.api_url)?
-            .with_name(&self.bootnode.name);
+        let bootnode = BeeClient::new(&self.bootnode.api_url)?.with_name(&self.bootnode.name);
 
         let nodes: Result<Vec<BeeClient>, _> = self
             .nodes
             .iter()
-            .map(|n| {
-                BeeClient::new(&n.api_url).map(|c| c.with_name(&n.name))
-            })
+            .map(|n| BeeClient::new(&n.api_url).map(|c| c.with_name(&n.name)))
             .collect();
 
         Ok(CheckContext::new(bootnode, nodes?))
@@ -81,7 +78,11 @@ pub struct CheckConfig {
     pub enabled: bool,
 
     /// Timeout for this check
-    #[serde(default, with = "humantime_serde", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        with = "humantime_serde",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub timeout: Option<Duration>,
 
     /// Number of retries
@@ -89,7 +90,11 @@ pub struct CheckConfig {
     pub retries: Option<u32>,
 
     /// Delay between retries
-    #[serde(default, with = "humantime_serde", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        with = "humantime_serde",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub retry_delay: Option<Duration>,
 
     /// Additional check-specific options
@@ -155,10 +160,7 @@ impl Config {
 
     /// Check if a specific check is enabled
     pub fn is_check_enabled(&self, name: &str) -> bool {
-        self.checks
-            .get(name)
-            .map(|c| c.enabled)
-            .unwrap_or(true) // Default to enabled if not specified
+        self.checks.get(name).map(|c| c.enabled).unwrap_or(true) // Default to enabled if not specified
     }
 
     /// Get list of enabled checks

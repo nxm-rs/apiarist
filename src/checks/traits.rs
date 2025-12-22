@@ -94,7 +94,11 @@ pub struct CheckResult {
 
 impl CheckResult {
     /// Create a new check result
-    pub fn new(check_name: impl Into<String>, node_results: Vec<NodeResult>, duration: Duration) -> Self {
+    pub fn new(
+        check_name: impl Into<String>,
+        node_results: Vec<NodeResult>,
+        duration: Duration,
+    ) -> Self {
         let passed = node_results.iter().all(|r| r.passed);
         Self {
             check_name: check_name.into(),
@@ -116,7 +120,11 @@ impl CheckResult {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CheckOptions {
     /// Maximum time to wait for check completion
-    #[serde(default, with = "humantime_serde", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        with = "humantime_serde",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub timeout: Option<Duration>,
 
     /// Number of retry attempts for transient failures
@@ -124,7 +132,11 @@ pub struct CheckOptions {
     pub retries: u32,
 
     /// Delay between retry attempts
-    #[serde(default, with = "humantime_serde", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        with = "humantime_serde",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub retry_delay: Option<Duration>,
 
     /// Check-specific options (arbitrary key-value pairs)
@@ -145,7 +157,9 @@ impl CheckOptions {
 
     /// Get an extra option as a specific type
     pub fn get_extra<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Option<T> {
-        self.extra.get(key).and_then(|v| serde_json::from_value(v.clone()).ok())
+        self.extra
+            .get(key)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 }
 
@@ -215,7 +229,8 @@ pub trait Check: Send + Sync {
     fn description(&self) -> &'static str;
 
     /// Run the check against the cluster
-    async fn run(&self, ctx: &CheckContext, opts: &CheckOptions) -> Result<CheckResult, CheckError>;
+    async fn run(&self, ctx: &CheckContext, opts: &CheckOptions)
+    -> Result<CheckResult, CheckError>;
 
     /// Default options for this check
     fn default_options(&self) -> CheckOptions {
@@ -227,4 +242,3 @@ pub trait Check: Send + Sync {
         }
     }
 }
-
