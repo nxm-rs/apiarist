@@ -205,7 +205,7 @@ impl CheckContext {
 ///
 /// ```ignore
 /// use async_trait::async_trait;
-/// use apiary::checks::{Check, CheckContext, CheckOptions, CheckResult, CheckError};
+/// use apiarist::checks::{Check, CheckContext, CheckOptions, CheckResult, CheckError};
 ///
 /// pub struct MyCheck;
 ///

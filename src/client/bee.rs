@@ -32,7 +32,7 @@ pub type BeeResult<T> = Result<T, BeeError>;
 ///
 /// # Example
 /// ```no_run
-/// use apiary::client::BeeClient;
+/// use apiarist::client::BeeClient;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let client = BeeClient::new("http://localhost:1633")?;

@@ -1,4 +1,4 @@
-//! Apiary CLI - Swarm Node Testing Tool
+//! Apiarist CLI - The Beekeeper Who Stress-Tests Your Swarm
 //!
 //! Run checks against Bee node clusters to verify network health and functionality.
 
@@ -7,13 +7,13 @@ use clap::{Parser, Subcommand};
 use std::sync::Arc;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-use apiary::api::{ApiState, start_api_server};
-use apiary::checks::{Check, registry::CHECKS};
-use apiary::config::Config;
+use apiarist::api::{ApiState, start_api_server};
+use apiarist::checks::{Check, registry::CHECKS};
+use apiarist::config::Config;
 
-/// Apiary - Where Swarm nodes go to get stress-tested
+/// Apiarist - The beekeeper who stress-tests your Swarm
 #[derive(Debug, Parser)]
-#[command(name = "apiary")]
+#[command(name = "apiarist")]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// Enable verbose logging
@@ -290,7 +290,7 @@ fn init_config(output: &str) -> Result<()> {
     println!("Created {}", output);
     println!();
     println!("Edit the file to configure your cluster, then run:");
-    println!("  apiary check --config {}", output);
+    println!("  apiarist check --config {}", output);
 
     Ok(())
 }
@@ -310,7 +310,7 @@ fn list_checks() {
 
     println!();
     println!("Run specific checks with:");
-    println!("  apiary check --checks pingpong,peercount");
+    println!("  apiarist check --checks pingpong,peercount");
 }
 
 /// Validate a configuration file

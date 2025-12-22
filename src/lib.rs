@@ -1,11 +1,11 @@
-//! Apiary - Swarm Node Testing Framework
+//! Apiarist - The Beekeeper Who Stress-Tests Your Swarm
 //!
-//! A Rust-based testing tool for Ethereum Swarm networks, designed to run
-//! comprehensive checks against Bee node clusters.
+//! A Rust-based testing tool for Ethereum Swarm networks that runs *inside*
+//! your test environment instead of awkwardly poking at it from outside.
 //!
 //! ## Architecture
 //!
-//! Apiary follows the [Assertoor](https://github.com/ethpandaops/assertoor) pattern:
+//! Apiarist follows the [Assertoor](https://github.com/ethpandaops/assertoor) pattern:
 //! - Runs as a service within Kurtosis test environments
 //! - Executes YAML-defined test configurations
 //! - Provides HTTP status API for monitoring progress

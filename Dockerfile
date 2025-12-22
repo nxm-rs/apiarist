@@ -25,13 +25,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/apiary /usr/local/bin/apiary
+COPY --from=builder /app/target/release/apiarist /usr/local/bin/apiarist
 
 # Create non-root user
-RUN useradd -m -u 1000 apiary
-USER apiary
+RUN useradd -m -u 1000 apiarist
+USER apiarist
 
-WORKDIR /home/apiary
+WORKDIR /home/apiarist
 
-ENTRYPOINT ["apiary"]
+ENTRYPOINT ["apiarist"]
 CMD ["--help"]

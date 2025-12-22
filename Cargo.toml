@@ -1,11 +1,11 @@
 [package]
-name = "apiary"
+name = "apiarist"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-description = "Where Swarm nodes go to get stress-tested. In Rust, obviously."
-repository = "https://github.com/nxm-rs/apiary"
-keywords = ["swarm", "ethereum", "testing", "kurtosis"]
+description = "The beekeeper who stress-tests your Swarm. Runs inside your enclave, not outside."
+repository = "https://github.com/nxm-rs/apiarist"
+keywords = ["swarm", "ethereum", "testing", "kurtosis", "beekeeper"]
 categories = ["development-tools::testing"]
 
 [dependencies]
