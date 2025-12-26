@@ -75,11 +75,67 @@ plan.wait(
 
 ## Checks
 
-| Check | What it tests | Status |
-|-------|---------------|--------|
-| `pingpong` | Can your nodes actually talk to each other? | Done |
-| `peercount` | Do they have friends? | Soon |
-| `kademlia` | Is the DHT not completely broken? | Soon |
+### P0 - Core Protocol (Implemented)
+
+| Check | What it tests |
+|-------|---------------|
+| `pingpong` | Peer connectivity with RTT measurement |
+| `peercount` | Validates minimum peer counts per node |
+| `kademlia` | DHT topology validation (depth, bins, reachability) |
+| `fullconnectivity` | Full mesh - every node can reach every other node |
+
+### P1 - Data Operations (Coming Soon)
+
+| Check | What it tests |
+|-------|---------------|
+| `smoke` | Quick upload/download sanity check |
+| `pushsync` | Chunk push sync to closest node |
+| `retrieval` | Upload on one node, download from another |
+| `fileretrieval` | Same for files (bytes endpoint) |
+
+### P2+ - Advanced Features (Planned)
+
+`postage`, `manifest`, `feed`, `soc`, `pss`, `balances`, `settlements`, `stake`
+
+## Local Development
+
+Build and test locally without publishing Docker images:
+
+```bash
+# Build and run tests
+make build    # Build binary
+make test     # Run all tests
+make ci       # Run full CI (fmt, lint, test, build)
+
+# Build Docker image locally
+make docker-build   # Creates apiarist:local
+
+# Run with Kurtosis using your local build
+make kurtosis-run          # Full config with local image
+make kurtosis-run-minimal  # Minimal config (2 nodes, fast)
+
+# Monitor running tests
+make kurtosis-logs    # Follow apiarist logs
+make kurtosis-status  # Check test status
+make kurtosis-results # Get full results
+
+# Cleanup
+make kurtosis-clean   # Remove enclave
+```
+
+Or manually:
+
+```bash
+# Build local image
+docker build -t apiarist:local .
+
+# Run with apiary
+cd ../apiary
+kurtosis run . '{"apiarist_image": "apiarist:local"}'
+
+# Or use the local config
+kurtosis run . --args-file network_params_local.json
+```
 
 ## Why not just use Beekeeper?
 

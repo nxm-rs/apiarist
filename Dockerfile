@@ -3,17 +3,20 @@ FROM rust:1.92-bookworm AS builder
 
 WORKDIR /app
 
-# Copy manifests
+# Copy workspace manifests first for dependency caching
 COPY Cargo.toml Cargo.lock ./
+COPY crates/apiarist-testkit/Cargo.toml ./crates/apiarist-testkit/
 
-# Create dummy src to cache dependencies
-RUN mkdir src && \
+# Create dummy sources to cache dependencies
+RUN mkdir -p src crates/apiarist-testkit/src && \
     echo "fn main() {}" > src/main.rs && \
+    echo "// dummy" > crates/apiarist-testkit/src/lib.rs && \
     cargo build --release && \
-    rm -rf src
+    rm -rf src crates/apiarist-testkit/src
 
-# Copy actual source
+# Copy actual sources
 COPY src ./src
+COPY crates ./crates
 
 # Build release binary
 RUN touch src/main.rs && cargo build --release
