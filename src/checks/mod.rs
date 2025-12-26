@@ -5,22 +5,28 @@
 //!
 //! ## Check Categories
 //!
-//! - **Core Protocol**: pingpong, peercount, kademlia, fullconnectivity
-//! - **Content**: retrieval, pushsync, pullsync
-//! - **Economic**: postage, settlements, balances
-//! - **Long-running**: smoke, load
+//! - **Core Protocol (P0)**: pingpong, peercount, kademlia, fullconnectivity
+//! - **Content (P1)**: retrieval, pushsync, pullsync (TODO)
+//! - **Economic (P3)**: postage, settlements, balances (TODO)
+//! - **Long-running (P4)**: smoke, load (TODO)
 //!
 //! ## Adding New Checks
 //!
 //! 1. Create a new file in `src/checks/` (e.g., `mycheck.rs`)
 //! 2. Implement the `Check` trait
-//! 3. Register in `CHECKS` registry below
+//! 3. Register in `registry.rs`
 //! 4. Add to `mod.rs` exports
 
+mod fullconnectivity;
+mod kademlia;
+mod peercount;
 mod pingpong;
 pub mod registry;
 mod traits;
 
+pub use fullconnectivity::FullconnectivityCheck;
+pub use kademlia::KademliaCheck;
+pub use peercount::PeercountCheck;
 pub use pingpong::PingpongCheck;
 pub use registry::CHECKS;
 pub use traits::*;
