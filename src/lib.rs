@@ -24,3 +24,4 @@ pub mod api;
 pub mod checks;
 pub mod client;
 pub mod config;
+pub mod utils;

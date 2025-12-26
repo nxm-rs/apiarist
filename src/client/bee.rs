@@ -8,6 +8,7 @@ use thiserror::Error;
 use url::Url;
 
 use super::types::*;
+use crate::utils::HasId;
 
 /// Errors that can occur when interacting with the Bee API
 #[derive(Debug, Error)]
@@ -237,9 +238,21 @@ impl BeeClient {
     }
 }
 
+// Implement HasId for BeeClient to enable use with concurrent utilities
+impl HasId for BeeClient {
+    fn id(&self) -> String {
+        self.name
+            .clone()
+            .unwrap_or_else(|| self.base_url.to_string())
+    }
+}
+
+// Note: Arc<BeeClient> gets HasId via the blanket impl<T: HasId> HasId for Arc<T>
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::HasId;
 
     #[test]
     fn test_client_creation() {
@@ -253,5 +266,19 @@ mod tests {
             .unwrap()
             .with_name("bootnode");
         assert_eq!(client.name(), Some("bootnode"));
+    }
+
+    #[test]
+    fn test_has_id_with_name() {
+        let client = BeeClient::new("http://localhost:1633")
+            .unwrap()
+            .with_name("node-1");
+        assert_eq!(client.id(), "node-1");
+    }
+
+    #[test]
+    fn test_has_id_without_name() {
+        let client = BeeClient::new("http://localhost:1633").unwrap();
+        assert_eq!(client.id(), "http://localhost:1633/");
     }
 }
