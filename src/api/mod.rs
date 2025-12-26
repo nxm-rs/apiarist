@@ -8,7 +8,24 @@
 //! - `GET /health` - Health check (always returns 200 if running)
 //! - `GET /status` - Current execution status
 //! - `GET /results` - Check results (available after completion)
+//! - `GET /metrics` - Prometheus metrics (for observability stack)
+//!
+//! ## Kurtosis Integration
+//!
+//! Primary interface is the status API (used with `plan.wait()`).
+//! Metrics endpoint integrates with the observability stack:
+//!
+//! ```python
+//! plan.wait(
+//!     service_name = "apiarist",
+//!     recipe = GetHttpRequestRecipe(port_id = "api", endpoint = "/status"),
+//!     field = "extract.status",
+//!     assertion = "IN",
+//!     target_value = ["completed", "failed"],
+//! )
+//! ```
 
+mod metrics;
 mod server;
 mod state;
 
