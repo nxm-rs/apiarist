@@ -5,7 +5,7 @@
 //!
 //! ## Check Categories
 //!
-//! - **Core Protocol (P0)**: pingpong, peercount, kademlia, fullconnectivity
+//! - **Core Protocol (P0)**: pingpong, peercount, fullconnectivity
 //! - **Content (P1)**: retrieval, pushsync, pullsync (TODO)
 //! - **Economic (P3)**: postage, settlements, balances (TODO)
 //! - **Long-running (P4)**: smoke, load (TODO)
@@ -18,14 +18,12 @@
 //! 4. Add to `mod.rs` exports
 
 mod fullconnectivity;
-mod kademlia;
 mod peercount;
 mod pingpong;
 pub mod registry;
 mod traits;
 
 pub use fullconnectivity::FullconnectivityCheck;
-pub use kademlia::KademliaCheck;
 pub use peercount::PeercountCheck;
 pub use pingpong::PingpongCheck;
 pub use registry::CHECKS;
