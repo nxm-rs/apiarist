@@ -11,6 +11,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::client::BeeClient;
+use crate::config::NodeType;
 
 /// Errors that can occur during check execution
 #[derive(Debug, Error)]
@@ -163,6 +164,26 @@ impl CheckOptions {
     }
 }
 
+/// Counts of nodes by type
+#[derive(Debug, Clone, Default)]
+pub struct NodeTypeCounts {
+    pub boot: usize,
+    pub full: usize,
+    pub light: usize,
+}
+
+impl NodeTypeCounts {
+    /// Get total node count
+    pub fn total(&self) -> usize {
+        self.boot + self.full + self.light
+    }
+
+    /// Get count of full-capable nodes (boot + full)
+    pub fn full_capable(&self) -> usize {
+        self.boot + self.full
+    }
+}
+
 /// Context provided to checks during execution
 #[derive(Clone)]
 pub struct CheckContext {
@@ -193,6 +214,69 @@ impl CheckContext {
     /// Get the number of nodes (including bootnode)
     pub fn node_count(&self) -> usize {
         self.nodes.len()
+    }
+
+    // =========================================================================
+    // Node Type Filtering Methods
+    // =========================================================================
+
+    /// Get all boot nodes
+    pub fn boot_nodes(&self) -> Vec<&Arc<BeeClient>> {
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type().is_boot())
+            .collect()
+    }
+
+    /// Get all full nodes (excludes boot nodes)
+    pub fn full_nodes(&self) -> Vec<&Arc<BeeClient>> {
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type() == NodeType::Full)
+            .collect()
+    }
+
+    /// Get all full-capable nodes (full + boot nodes)
+    /// These nodes participate in the full connectivity mesh
+    pub fn full_capable_nodes(&self) -> Vec<&Arc<BeeClient>> {
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type().is_full())
+            .collect()
+    }
+
+    /// Get all light nodes
+    pub fn light_nodes(&self) -> Vec<&Arc<BeeClient>> {
+        self.nodes
+            .iter()
+            .filter(|n| n.node_type().is_light())
+            .collect()
+    }
+
+    /// Get count of each node type
+    pub fn node_type_counts(&self) -> NodeTypeCounts {
+        let mut counts = NodeTypeCounts::default();
+        for node in &self.nodes {
+            match node.node_type() {
+                NodeType::Boot => counts.boot += 1,
+                NodeType::Full => counts.full += 1,
+                NodeType::Light => counts.light += 1,
+            }
+        }
+        counts
+    }
+
+    /// Get expected peer count for a node based on its type
+    ///
+    /// - Boot nodes: Connect to all other nodes (total - 1)
+    /// - Full nodes: Connect to all full-capable nodes except self (full_capable - 1)
+    /// - Light nodes: Connect to at least 1 node
+    pub fn expected_peers_for(&self, node: &BeeClient) -> usize {
+        match node.node_type() {
+            NodeType::Boot => self.node_count().saturating_sub(1),
+            NodeType::Full => self.full_capable_nodes().len().saturating_sub(1),
+            NodeType::Light => 1,
+        }
     }
 }
 

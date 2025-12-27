@@ -11,6 +11,51 @@ use thiserror::Error;
 use crate::checks::{CheckContext, CheckOptions};
 use crate::client::BeeClient;
 
+/// Type of node in the Swarm network
+///
+/// Different node types have different connectivity expectations:
+/// - Boot: Must connect to all other nodes
+/// - Full: Must connect to all other full nodes
+/// - Light: Must have at least 1 peer
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum NodeType {
+    /// Bootnode - connected to all nodes
+    Boot,
+    /// Full node - connected to all full nodes
+    #[default]
+    Full,
+    /// Light node - connected to at least one node
+    Light,
+}
+
+impl NodeType {
+    /// Check if this is a boot node
+    pub fn is_boot(&self) -> bool {
+        matches!(self, NodeType::Boot)
+    }
+
+    /// Check if this is a full node (includes boot nodes for connectivity purposes)
+    pub fn is_full(&self) -> bool {
+        matches!(self, NodeType::Boot | NodeType::Full)
+    }
+
+    /// Check if this is a light node
+    pub fn is_light(&self) -> bool {
+        matches!(self, NodeType::Light)
+    }
+}
+
+impl std::fmt::Display for NodeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NodeType::Boot => write!(f, "boot"),
+            NodeType::Full => write!(f, "full"),
+            NodeType::Light => write!(f, "light"),
+        }
+    }
+}
+
 /// Errors that can occur during configuration
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -34,6 +79,9 @@ pub struct NodeConfig {
     pub name: String,
     /// HTTP API URL (e.g., "http://localhost:1633")
     pub api_url: String,
+    /// Node type (boot, full, light) - defaults to Full for backwards compatibility
+    #[serde(default)]
+    pub node_type: NodeType,
 }
 
 /// Cluster configuration
@@ -58,12 +106,17 @@ fn default_cluster_name() -> String {
 impl ClusterConfig {
     /// Create a CheckContext from this cluster configuration
     pub fn to_check_context(&self) -> Result<CheckContext, ConfigError> {
-        let bootnode = BeeClient::new(&self.bootnode.api_url)?.with_name(&self.bootnode.name);
+        let bootnode = BeeClient::new(&self.bootnode.api_url)?
+            .with_name(&self.bootnode.name)
+            .with_node_type(self.bootnode.node_type);
 
         let nodes: Result<Vec<BeeClient>, _> = self
             .nodes
             .iter()
-            .map(|n| BeeClient::new(&n.api_url).map(|c| c.with_name(&n.name)))
+            .map(|n| {
+                BeeClient::new(&n.api_url)
+                    .map(|c| c.with_name(&n.name).with_node_type(n.node_type))
+            })
             .collect();
 
         Ok(CheckContext::new(bootnode, nodes?))
@@ -180,15 +233,18 @@ impl Config {
                 bootnode: NodeConfig {
                     name: "bootnode".to_string(),
                     api_url: "http://bootnode:1633".to_string(),
+                    node_type: NodeType::Boot,
                 },
                 nodes: vec![
                     NodeConfig {
                         name: "bee-0".to_string(),
                         api_url: "http://bee-0:1633".to_string(),
+                        node_type: NodeType::Full,
                     },
                     NodeConfig {
                         name: "bee-1".to_string(),
                         api_url: "http://bee-1:1633".to_string(),
+                        node_type: NodeType::Full,
                     },
                 ],
             },
@@ -196,7 +252,7 @@ impl Config {
                 let mut checks = HashMap::new();
                 checks.insert("pingpong".to_string(), CheckConfig::default());
                 checks.insert("peercount".to_string(), CheckConfig::default());
-                checks.insert("kademlia".to_string(), CheckConfig::default());
+                checks.insert("fullconnectivity".to_string(), CheckConfig::default());
                 checks
             },
         }
@@ -233,12 +289,67 @@ checks:
     enabled: false
 ";
 
+    const SAMPLE_CONFIG_WITH_TYPES: &str = r"
+cluster:
+  name: test-cluster
+  bootnode:
+    name: bootnode
+    api_url: http://localhost:1633
+    node_type: boot
+  nodes:
+    - name: bee-full-0
+      api_url: http://localhost:1634
+      node_type: full
+    - name: bee-light-0
+      api_url: http://localhost:1635
+      node_type: light
+";
+
     #[test]
     fn test_parse_config() {
         let config = Config::from_yaml(SAMPLE_CONFIG).unwrap();
         assert_eq!(config.cluster.name, "test-cluster");
         assert_eq!(config.cluster.bootnode.name, "bootnode");
         assert_eq!(config.cluster.nodes.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_config_with_node_types() {
+        let config = Config::from_yaml(SAMPLE_CONFIG_WITH_TYPES).unwrap();
+        assert_eq!(config.cluster.bootnode.node_type, NodeType::Boot);
+        assert_eq!(config.cluster.nodes[0].node_type, NodeType::Full);
+        assert_eq!(config.cluster.nodes[1].node_type, NodeType::Light);
+    }
+
+    #[test]
+    fn test_node_type_defaults_to_full() {
+        let config = Config::from_yaml(SAMPLE_CONFIG).unwrap();
+        // Nodes without explicit type should default to Full
+        assert_eq!(config.cluster.bootnode.node_type, NodeType::Full);
+        assert_eq!(config.cluster.nodes[0].node_type, NodeType::Full);
+        assert_eq!(config.cluster.nodes[1].node_type, NodeType::Full);
+    }
+
+    #[test]
+    fn test_node_type_methods() {
+        assert!(NodeType::Boot.is_boot());
+        assert!(NodeType::Boot.is_full()); // Boot nodes are full-capable
+        assert!(!NodeType::Boot.is_light());
+
+        assert!(!NodeType::Full.is_boot());
+        assert!(NodeType::Full.is_full());
+        assert!(!NodeType::Full.is_light());
+
+        assert!(!NodeType::Light.is_boot());
+        assert!(!NodeType::Light.is_full());
+        assert!(NodeType::Light.is_light());
+    }
+
+    #[test]
+    fn test_node_type_display() {
+        assert_eq!(NodeType::Boot.to_string(), "boot");
+        assert_eq!(NodeType::Full.to_string(), "full");
+        assert_eq!(NodeType::Light.to_string(), "light");
     }
 
     #[test]
@@ -254,6 +365,9 @@ checks:
         let config = Config::default_config();
         assert!(!config.cluster.nodes.is_empty());
         assert!(!config.checks.is_empty());
+        // Default config should have proper node types
+        assert_eq!(config.cluster.bootnode.node_type, NodeType::Boot);
+        assert_eq!(config.cluster.nodes[0].node_type, NodeType::Full);
     }
 
     #[test]
@@ -262,5 +376,9 @@ checks:
         let yaml = config.to_yaml().unwrap();
         let parsed = Config::from_yaml(&yaml).unwrap();
         assert_eq!(config.cluster.name, parsed.cluster.name);
+        assert_eq!(
+            config.cluster.bootnode.node_type,
+            parsed.cluster.bootnode.node_type
+        );
     }
 }

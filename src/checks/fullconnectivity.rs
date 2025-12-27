@@ -1,13 +1,17 @@
 //! Full Connectivity Check
 //!
-//! Verifies that all nodes in the cluster can communicate with each other.
-//! This is more thorough than pingpong as it tests every node pair.
+//! Verifies that all nodes in the cluster have appropriate connectivity
+//! based on their node type:
+//!
+//! - **Boot nodes**: Must connect to ALL other nodes (total - 1)
+//! - **Full nodes**: Must connect to all other full-capable nodes (full_capable - 1)
+//! - **Light nodes**: Must have at least 1 peer
 //!
 //! ## What it checks
 //!
-//! 1. Every node can ping every other node
-//! 2. All ping operations complete successfully
-//! 3. Measures connectivity matrix
+//! 1. Collects peer lists from all nodes
+//! 2. Validates each node has the expected peer count for its type
+//! 3. Verifies all peers are valid cluster members
 //!
 //! ## Equivalent beekeeper check
 //!
@@ -16,20 +20,56 @@
 //! ## Options
 //!
 //! - `timeout`: Maximum time for check (default: 10m)
-//! - `retries`: Number of retry attempts per ping (default: 3)
-//! - `retry_delay`: Delay between retries (default: 2s)
 
 use async_trait::async_trait;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 use super::traits::{Check, CheckContext, CheckError, CheckOptions, CheckResult, NodeResult};
+use crate::config::NodeType;
 
 /// Full connectivity check
 ///
-/// Tests that every node can reach every other node in the cluster.
+/// Tests that every node has the expected number of peers based on its type.
 pub struct FullconnectivityCheck;
+
+/// Results broken down by node type
+#[derive(Debug, Default)]
+struct ConnectivityStats {
+    boot_passed: usize,
+    boot_failed: usize,
+    full_passed: usize,
+    full_failed: usize,
+    light_passed: usize,
+    light_failed: usize,
+}
+
+impl ConnectivityStats {
+    fn total_passed(&self) -> usize {
+        self.boot_passed + self.full_passed + self.light_passed
+    }
+
+    fn total_failed(&self) -> usize {
+        self.boot_failed + self.full_failed + self.light_failed
+    }
+
+    fn all_passed(&self) -> bool {
+        self.total_failed() == 0
+    }
+
+    fn summary(&self) -> String {
+        format!(
+            "Boot: {}/{}, Full: {}/{}, Light: {}/{}",
+            self.boot_passed,
+            self.boot_passed + self.boot_failed,
+            self.full_passed,
+            self.full_passed + self.full_failed,
+            self.light_passed,
+            self.light_passed + self.light_failed,
+        )
+    }
+}
 
 #[async_trait]
 impl Check for FullconnectivityCheck {
@@ -38,40 +78,41 @@ impl Check for FullconnectivityCheck {
     }
 
     fn description(&self) -> &'static str {
-        "Verify all nodes can communicate with each other"
+        "Verify all nodes have appropriate connectivity for their type"
     }
 
     async fn run(
         &self,
         ctx: &CheckContext,
-        opts: &CheckOptions,
+        _opts: &CheckOptions,
     ) -> Result<CheckResult, CheckError> {
         let start = Instant::now();
-        let max_retries = opts.retries.max(1);
-        let retry_delay = opts.retry_delay_or(Duration::from_secs(2));
 
-        let node_count = ctx.node_count();
-        let expected_connections = if node_count > 1 {
-            node_count * (node_count - 1)
-        } else {
-            0
-        };
-
+        let counts = ctx.node_type_counts();
         info!(
-            nodes = node_count,
-            expected_connections = expected_connections,
-            retries = max_retries,
+            total_nodes = counts.total(),
+            boot_nodes = counts.boot,
+            full_nodes = counts.full,
+            light_nodes = counts.light,
             "Starting fullconnectivity check"
         );
 
-        // First, collect all overlay addresses
+        // Step 1: Collect all overlay addresses
         let mut overlays: HashMap<String, String> = HashMap::new();
+        let mut overlay_set: HashSet<String> = HashSet::new();
+
         for node in &ctx.nodes {
             let node_name = node.name().unwrap_or("unknown").to_string();
             match node.addresses().await {
                 Ok(addrs) => {
                     overlays.insert(node_name.clone(), addrs.overlay.clone());
-                    debug!(node = %node_name, overlay = %addrs.overlay, "Got overlay address");
+                    overlay_set.insert(addrs.overlay.clone());
+                    debug!(
+                        node = %node_name,
+                        overlay = %addrs.overlay,
+                        node_type = %node.node_type(),
+                        "Got overlay address"
+                    );
                 }
                 Err(e) => {
                     warn!(node = %node_name, error = %e, "Failed to get addresses");
@@ -79,132 +120,130 @@ impl Check for FullconnectivityCheck {
             }
         }
 
+        // Step 2: Check each node's connectivity
         let mut node_results = Vec::new();
-        let mut successful_pings = 0usize;
-        let mut failed_pings = 0usize;
+        let mut stats = ConnectivityStats::default();
 
-        // Test connectivity from each node to all others
-        for source_node in &ctx.nodes {
-            let source_name = source_node.name().unwrap_or("unknown").to_string();
-            let source_overlay = overlays.get(&source_name).cloned();
+        for node in &ctx.nodes {
+            let node_name = node.name().unwrap_or("unknown").to_string();
+            let node_type = node.node_type();
+            let expected_peers = ctx.expected_peers_for(node);
 
-            let mut node_passed = true;
-            let mut ping_results = Vec::new();
-            let mut success_count = 0usize;
-            let mut fail_count = 0usize;
+            let result = match node.peers().await {
+                Ok(peers) => {
+                    let peer_count = peers.peers.len();
 
-            // Ping all other nodes
-            for (target_name, target_overlay) in &overlays {
-                // Skip self
-                if Some(target_overlay) == source_overlay.as_ref() {
-                    continue;
-                }
+                    // Validate all peers are known cluster members
+                    let invalid_peers: Vec<_> = peers
+                        .peers
+                        .iter()
+                        .filter(|p| !overlay_set.contains(&p.address))
+                        .map(|p| p.address.clone())
+                        .collect();
 
-                let mut success = false;
+                    let has_enough_peers = match node_type {
+                        NodeType::Boot => peer_count >= expected_peers,
+                        NodeType::Full => peer_count >= expected_peers,
+                        NodeType::Light => peer_count >= 1,
+                    };
 
-                for attempt in 0..max_retries {
-                    if attempt > 0 {
-                        let delay = retry_delay * attempt;
+                    let has_valid_peers = invalid_peers.is_empty();
+                    let passed = has_enough_peers && has_valid_peers;
+
+                    if passed {
                         debug!(
-                            source = %source_name,
-                            target = %target_name,
-                            attempt = attempt,
-                            "Retrying ping"
+                            node = %node_name,
+                            node_type = %node_type,
+                            peers = peer_count,
+                            expected = expected_peers,
+                            "Node passed"
                         );
-                        tokio::time::sleep(delay).await;
-                    }
 
-                    match source_node.pingpong(target_overlay).await {
-                        Ok(response) => {
-                            debug!(
-                                source = %source_name,
-                                target = %target_name,
-                                rtt = %response.rtt,
-                                "Ping successful"
-                            );
-                            ping_results.push(serde_json::json!({
-                                "target": target_name,
-                                "target_overlay": target_overlay,
-                                "rtt": response.rtt,
-                                "attempts": attempt + 1,
-                                "success": true
-                            }));
-                            success = true;
-                            success_count += 1;
-                            break;
+                        // Update stats
+                        match node_type {
+                            NodeType::Boot => stats.boot_passed += 1,
+                            NodeType::Full => stats.full_passed += 1,
+                            NodeType::Light => stats.light_passed += 1,
                         }
-                        Err(e) => {
-                            if attempt == max_retries - 1 {
-                                warn!(
-                                    source = %source_name,
-                                    target = %target_name,
-                                    error = %e,
-                                    attempts = max_retries,
-                                    "Ping failed after all retries"
-                                );
-                            }
+
+                        NodeResult::passed(&node_name)
+                            .with_detail("node_type", node_type.to_string())
+                            .with_detail("peer_count", peer_count)
+                            .with_detail("expected_peers", expected_peers)
+                            .with_detail(
+                                "overlay",
+                                overlays.get(&node_name).cloned().unwrap_or_default(),
+                            )
+                    } else {
+                        let error_msg = if !has_enough_peers {
+                            format!(
+                                "Insufficient peers: {} < {} (expected for {})",
+                                peer_count, expected_peers, node_type
+                            )
+                        } else {
+                            format!("Invalid peers detected: {:?}", invalid_peers)
+                        };
+
+                        warn!(
+                            node = %node_name,
+                            node_type = %node_type,
+                            peers = peer_count,
+                            expected = expected_peers,
+                            invalid_peers = ?invalid_peers,
+                            "Node failed"
+                        );
+
+                        // Update stats
+                        match node_type {
+                            NodeType::Boot => stats.boot_failed += 1,
+                            NodeType::Full => stats.full_failed += 1,
+                            NodeType::Light => stats.light_failed += 1,
                         }
+
+                        NodeResult::failed(&node_name, error_msg)
+                            .with_detail("node_type", node_type.to_string())
+                            .with_detail("peer_count", peer_count)
+                            .with_detail("expected_peers", expected_peers)
+                            .with_detail("invalid_peers", invalid_peers)
+                            .with_detail(
+                                "overlay",
+                                overlays.get(&node_name).cloned().unwrap_or_default(),
+                            )
                     }
                 }
+                Err(e) => {
+                    warn!(node = %node_name, error = %e, "Failed to get peers");
 
-                if !success {
-                    node_passed = false;
-                    fail_count += 1;
-                    ping_results.push(serde_json::json!({
-                        "target": target_name,
-                        "target_overlay": target_overlay,
-                        "attempts": max_retries,
-                        "success": false
-                    }));
+                    // Count as failed for the node's type
+                    match node_type {
+                        NodeType::Boot => stats.boot_failed += 1,
+                        NodeType::Full => stats.full_failed += 1,
+                        NodeType::Light => stats.light_failed += 1,
+                    }
+
+                    NodeResult::failed(&node_name, format!("Failed to get peers: {}", e))
+                        .with_detail("node_type", node_type.to_string())
                 }
-            }
-
-            successful_pings += success_count;
-            failed_pings += fail_count;
-
-            let result = if node_passed {
-                NodeResult::passed(&source_name)
-                    .with_detail("overlay", source_overlay.as_deref().unwrap_or("unknown"))
-                    .with_detail("successful_pings", success_count)
-                    .with_detail("failed_pings", fail_count)
-                    .with_detail("pings", ping_results)
-            } else {
-                NodeResult::failed(
-                    &source_name,
-                    format!("Failed to reach {} node(s)", fail_count),
-                )
-                .with_detail("overlay", source_overlay.as_deref().unwrap_or("unknown"))
-                .with_detail("successful_pings", success_count)
-                .with_detail("failed_pings", fail_count)
-                .with_detail("pings", ping_results)
             };
 
             node_results.push(result);
         }
 
         let duration = start.elapsed();
-        let passed = node_results.iter().all(|r| r.passed);
-        let total_pings = successful_pings + failed_pings;
+        let passed = stats.all_passed();
 
         info!(
             passed = passed,
-            successful_pings = successful_pings,
-            failed_pings = failed_pings,
-            total_pings = total_pings,
-            expected = expected_connections,
+            stats = %stats.summary(),
             duration_ms = duration.as_millis(),
             "Fullconnectivity check complete"
         );
 
-        let connectivity_pct = if expected_connections > 0 {
-            (successful_pings as f64 / expected_connections as f64 * 100.0) as u32
-        } else {
-            100
-        };
-
         let message = format!(
-            "Connectivity: {}/{} ({}%)",
-            successful_pings, expected_connections, connectivity_pct
+            "Connectivity: {} passed, {} failed ({})",
+            stats.total_passed(),
+            stats.total_failed(),
+            stats.summary()
         );
 
         Ok(CheckResult::new("fullconnectivity", node_results, duration).with_message(message))
@@ -237,5 +276,36 @@ mod tests {
         let opts = check.default_options();
         assert_eq!(opts.timeout, Some(Duration::from_secs(600)));
         assert_eq!(opts.retries, 3);
+    }
+
+    #[test]
+    fn test_connectivity_stats_summary() {
+        let stats = ConnectivityStats {
+            boot_passed: 1,
+            boot_failed: 0,
+            full_passed: 2,
+            full_failed: 1,
+            light_passed: 3,
+            light_failed: 0,
+        };
+        assert_eq!(stats.summary(), "Boot: 1/1, Full: 2/3, Light: 3/3");
+        assert!(!stats.all_passed());
+        assert_eq!(stats.total_passed(), 6);
+        assert_eq!(stats.total_failed(), 1);
+    }
+
+    #[test]
+    fn test_connectivity_stats_all_passed() {
+        let stats = ConnectivityStats {
+            boot_passed: 1,
+            boot_failed: 0,
+            full_passed: 3,
+            full_failed: 0,
+            light_passed: 2,
+            light_failed: 0,
+        };
+        assert!(stats.all_passed());
+        assert_eq!(stats.total_passed(), 6);
+        assert_eq!(stats.total_failed(), 0);
     }
 }

@@ -29,4 +29,4 @@
 
 mod cluster;
 
-pub use cluster::{CheckConfig, ClusterConfig, Config, NodeConfig};
+pub use cluster::{CheckConfig, ClusterConfig, Config, NodeConfig, NodeType};

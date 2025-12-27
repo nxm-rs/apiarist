@@ -8,6 +8,7 @@ use thiserror::Error;
 use url::Url;
 
 use super::types::*;
+use crate::config::NodeType;
 use crate::utils::HasId;
 
 /// Errors that can occur when interacting with the Bee API
@@ -50,6 +51,8 @@ pub struct BeeClient {
     client: Client,
     /// Node name for logging/identification
     name: Option<String>,
+    /// Node type for connectivity expectations
+    node_type: NodeType,
 }
 
 impl BeeClient {
@@ -65,6 +68,7 @@ impl BeeClient {
             base_url,
             client,
             name: None,
+            node_type: NodeType::Full, // Default to full node
         })
     }
 
@@ -76,6 +80,7 @@ impl BeeClient {
             base_url,
             client,
             name: None,
+            node_type: NodeType::Full, // Default to full node
         })
     }
 
@@ -85,9 +90,20 @@ impl BeeClient {
         self
     }
 
+    /// Set the node type for this client
+    pub fn with_node_type(mut self, node_type: NodeType) -> Self {
+        self.node_type = node_type;
+        self
+    }
+
     /// Get the node name if set
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
+    }
+
+    /// Get the node type
+    pub fn node_type(&self) -> NodeType {
+        self.node_type
     }
 
     /// Get the base URL
@@ -266,6 +282,25 @@ mod tests {
             .unwrap()
             .with_name("bootnode");
         assert_eq!(client.name(), Some("bootnode"));
+    }
+
+    #[test]
+    fn test_client_default_node_type() {
+        let client = BeeClient::new("http://localhost:1633").unwrap();
+        assert_eq!(client.node_type(), NodeType::Full);
+    }
+
+    #[test]
+    fn test_client_with_node_type() {
+        let client = BeeClient::new("http://localhost:1633")
+            .unwrap()
+            .with_node_type(NodeType::Boot);
+        assert_eq!(client.node_type(), NodeType::Boot);
+
+        let client = BeeClient::new("http://localhost:1633")
+            .unwrap()
+            .with_node_type(NodeType::Light);
+        assert_eq!(client.node_type(), NodeType::Light);
     }
 
     #[test]
