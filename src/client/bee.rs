@@ -165,7 +165,7 @@ impl BeeClient {
     /// OpenAPI: POST /pingpong/{address}
     /// Returns: PingpongResponse (RTT in nanoseconds)
     pub async fn pingpong(&self, peer_address: &str) -> BeeResult<PingpongResponse> {
-        let url = self.base_url.join(&format!("pingpong/{}", peer_address))?;
+        let url = self.base_url.join(&format!("pingpong/{peer_address}"))?;
         let response = self.client.post(url).send().await?;
 
         if response.status().is_success() {
@@ -300,7 +300,7 @@ impl BeeClient {
     /// OpenAPI: GET /chunks/{address}
     /// Returns: Raw chunk data (span + payload)
     pub async fn download_chunk(&self, reference: &str) -> BeeResult<Vec<u8>> {
-        let url = self.base_url.join(&format!("chunks/{}", reference))?;
+        let url = self.base_url.join(&format!("chunks/{reference}"))?;
         let response = self.client.get(url).send().await?;
 
         if response.status().is_success() {
@@ -322,7 +322,7 @@ impl BeeClient {
     /// OpenAPI: HEAD /chunks/{address}
     /// Returns: true if chunk exists, false otherwise
     pub async fn has_chunk(&self, reference: &str) -> BeeResult<bool> {
-        let url = self.base_url.join(&format!("chunks/{}", reference))?;
+        let url = self.base_url.join(&format!("chunks/{reference}"))?;
         let response = self.client.head(url).send().await?;
 
         Ok(response.status().is_success())
@@ -375,7 +375,7 @@ impl BeeClient {
     /// OpenAPI: GET /bytes/{reference}
     /// Returns: Raw data bytes
     pub async fn download_bytes(&self, reference: &str) -> BeeResult<Vec<u8>> {
-        let url = self.base_url.join(&format!("bytes/{}", reference))?;
+        let url = self.base_url.join(&format!("bytes/{reference}"))?;
         let response = self.client.get(url).send().await?;
 
         if response.status().is_success() {
@@ -424,7 +424,7 @@ impl BeeClient {
     /// OpenAPI: GET /stamps/{batch_id}
     /// Returns: PostageBatch
     pub async fn get_stamp(&self, batch_id: &str) -> BeeResult<PostageBatch> {
-        let url = self.base_url.join(&format!("stamps/{}", batch_id))?;
+        let url = self.base_url.join(&format!("stamps/{batch_id}"))?;
         let response = self.client.get(url).send().await?;
 
         if response.status().is_success() {
@@ -456,7 +456,7 @@ impl BeeClient {
         depth: u8,
         label: Option<&str>,
     ) -> BeeResult<BatchIdResponse> {
-        let mut url = self.base_url.join(&format!("stamps/{}/{}", amount, depth))?;
+        let mut url = self.base_url.join(&format!("stamps/{amount}/{depth}"))?;
 
         if let Some(lbl) = label {
             url.query_pairs_mut().append_pair("label", lbl);
@@ -510,7 +510,7 @@ impl BeeClient {
     /// OpenAPI: GET /tags/{uid}
     /// Returns: Tag
     pub async fn get_tag(&self, uid: u64) -> BeeResult<Tag> {
-        let url = self.base_url.join(&format!("tags/{}", uid))?;
+        let url = self.base_url.join(&format!("tags/{uid}"))?;
         let response = self.client.get(url).send().await?;
 
         if response.status().is_success() {

@@ -167,7 +167,7 @@ impl SmokeCheck {
             Err(e) => {
                 error!(node = %upload_node_name, error = %e, "Upload failed");
                 node_results.push(
-                    NodeResult::failed(&upload_node_name, format!("Upload failed: {}", e))
+                    NodeResult::failed(&upload_node_name, format!("Upload failed: {e}"))
                         .with_detail("action", "upload")
                         .with_detail("data_size", data_size),
                 );
@@ -230,7 +230,7 @@ impl SmokeCheck {
                 Err(e) => {
                     warn!(node = %node_name, error = %e, "Download failed");
                     node_results.push(
-                        NodeResult::failed(&node_name, format!("Download failed: {}", e))
+                        NodeResult::failed(&node_name, format!("Download failed: {e}"))
                             .with_detail("action", "download"),
                     );
                 }
@@ -277,7 +277,9 @@ impl Check for SmokeCheck {
                 .unwrap_or(42)
         });
         let specified_batch: Option<String> = opts.get_extra("batch_id");
-        let sync_wait_ms: u64 = opts.get_extra("sync_wait_ms").unwrap_or(DEFAULT_SYNC_WAIT_MS);
+        let sync_wait_ms: u64 = opts
+            .get_extra("sync_wait_ms")
+            .unwrap_or(DEFAULT_SYNC_WAIT_MS);
         let iteration_wait_secs: u64 = opts
             .get_extra("iteration_wait_secs")
             .unwrap_or(DEFAULT_ITERATION_WAIT_SECS);
@@ -297,9 +299,14 @@ impl Check for SmokeCheck {
         // upload_node_idx is the index of the node that has the batch (and should be used for uploads)
         let (batch_id, upload_node_idx) = if let Some(bid) = specified_batch {
             // If batch is specified, use first full-capable node or first node
-            let idx = ctx.full_capable_nodes()
+            let idx = ctx
+                .full_capable_nodes()
                 .first()
-                .and_then(|n| ctx.nodes.iter().position(|x| std::ptr::eq(x.as_ref(), n.as_ref())))
+                .and_then(|n| {
+                    ctx.nodes
+                        .iter()
+                        .position(|x| std::ptr::eq(x.as_ref(), n.as_ref()))
+                })
                 .unwrap_or(0);
             (bid, idx)
         } else {
@@ -352,7 +359,10 @@ impl Check for SmokeCheck {
                     iteration = iteration_count,
                     file_size = file_size,
                     uploads = format!("{}/{}", stats.uploads_succeeded, stats.uploads_attempted),
-                    downloads = format!("{}/{}", stats.downloads_succeeded, stats.downloads_attempted),
+                    downloads = format!(
+                        "{}/{}",
+                        stats.downloads_succeeded, stats.downloads_attempted
+                    ),
                     "File size test complete"
                 );
             }
@@ -366,7 +376,10 @@ impl Check for SmokeCheck {
 
                 // Wait between iterations
                 if iteration_wait_secs > 0 {
-                    debug!(wait_secs = iteration_wait_secs, "Waiting before next iteration");
+                    debug!(
+                        wait_secs = iteration_wait_secs,
+                        "Waiting before next iteration"
+                    );
                     tokio::time::sleep(Duration::from_secs(iteration_wait_secs)).await;
                 }
             } else {
@@ -384,8 +397,14 @@ impl Check for SmokeCheck {
         info!(
             passed = passed,
             iterations = iteration_count,
-            uploads = format!("{}/{}", total_stats.uploads_succeeded, total_stats.uploads_attempted),
-            downloads = format!("{}/{}", total_stats.downloads_succeeded, total_stats.downloads_attempted),
+            uploads = format!(
+                "{}/{}",
+                total_stats.uploads_succeeded, total_stats.uploads_attempted
+            ),
+            downloads = format!(
+                "{}/{}",
+                total_stats.downloads_succeeded, total_stats.downloads_attempted
+            ),
             mismatches = total_stats.mismatches,
             data_uploaded_mb = total_stats.data_uploaded_bytes as f64 / 1_000_000.0,
             data_downloaded_mb = total_stats.data_downloaded_bytes as f64 / 1_000_000.0,

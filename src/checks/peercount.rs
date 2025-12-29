@@ -87,7 +87,7 @@ impl Check for PeercountCheck {
                         node_results.push(
                             NodeResult::failed(
                                 &node_name,
-                                format!("Expected {} peers, got {}", min_peers, count),
+                                format!("Expected {min_peers} peers, got {count}"),
                             )
                             .with_detail("peer_count", count)
                             .with_detail("min_required", min_peers),
@@ -98,7 +98,7 @@ impl Check for PeercountCheck {
                     warn!(node = %node_name, error = %e, "Failed to get peers");
                     node_results.push(NodeResult::failed(
                         &node_name,
-                        format!("Failed to get peers: {}", e),
+                        format!("Failed to get peers: {e}"),
                     ));
                 }
             }
@@ -121,8 +121,7 @@ impl Check for PeercountCheck {
         );
 
         let message = format!(
-            "Total peers: {}, average: {} per node (min required: {})",
-            total_peers, avg_peers, min_peers
+            "Total peers: {total_peers}, average: {avg_peers} per node (min required: {min_peers})"
         );
 
         Ok(CheckResult::new("peercount", node_results, duration).with_message(message))
@@ -131,7 +130,7 @@ impl Check for PeercountCheck {
     fn default_options(&self) -> CheckOptions {
         CheckOptions {
             timeout: Some(Duration::from_secs(120)), // 2 minutes
-            retries: 0, // No retries needed for simple peer count
+            retries: 0,                              // No retries needed for simple peer count
             retry_delay: None,
             extra: Default::default(),
         }

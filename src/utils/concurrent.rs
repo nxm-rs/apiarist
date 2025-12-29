@@ -26,8 +26,8 @@
 
 use futures::stream::{self, StreamExt};
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::task::JoinSet;
@@ -142,7 +142,10 @@ pub struct WithId<T> {
 
 impl<T> WithId<T> {
     pub fn new(id: impl Into<String>, value: T) -> Self {
-        Self { id: id.into(), value }
+        Self {
+            id: id.into(),
+            value,
+        }
     }
 }
 
@@ -353,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_all_succeed() {
-        let items: Vec<_> = (0..5).map(|i| TestItem(format!("item-{}", i))).collect();
+        let items: Vec<_> = (0..5).map(|i| TestItem(format!("item-{i}"))).collect();
 
         let results = run_concurrent(
             items,
@@ -369,7 +372,7 @@ mod tests {
     #[tokio::test]
     async fn test_fail_fast_aborts() {
         let counter = Arc::new(AtomicUsize::new(0));
-        let items: Vec<_> = (0..10).map(|i| TestItem(format!("item-{}", i))).collect();
+        let items: Vec<_> = (0..10).map(|i| TestItem(format!("item-{i}"))).collect();
 
         let counter_clone = counter.clone();
         let result = run_concurrent(
@@ -430,7 +433,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_collect_partial_failures() {
-        let items: Vec<_> = (0..5).map(|i| TestItem(format!("item-{}", i))).collect();
+        let items: Vec<_> = (0..5).map(|i| TestItem(format!("item-{i}"))).collect();
 
         let results = run_concurrent_collect(
             items,

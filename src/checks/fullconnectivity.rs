@@ -177,11 +177,10 @@ impl Check for FullconnectivityCheck {
                     } else {
                         let error_msg = if !has_enough_peers {
                             format!(
-                                "Insufficient peers: {} < {} (expected for {})",
-                                peer_count, expected_peers, node_type
+                                "Insufficient peers: {peer_count} < {expected_peers} (expected for {node_type})"
                             )
                         } else {
-                            format!("Invalid peers detected: {:?}", invalid_peers)
+                            format!("Invalid peers detected: {invalid_peers:?}")
                         };
 
                         warn!(
@@ -221,7 +220,7 @@ impl Check for FullconnectivityCheck {
                         NodeType::Light => stats.light_failed += 1,
                     }
 
-                    NodeResult::failed(&node_name, format!("Failed to get peers: {}", e))
+                    NodeResult::failed(&node_name, format!("Failed to get peers: {e}"))
                         .with_detail("node_type", node_type.to_string())
                 }
             };

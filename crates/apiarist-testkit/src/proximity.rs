@@ -44,10 +44,7 @@ pub enum ProximityError {
 ///
 /// The proximity value (0-256 for 32-byte addresses)
 pub fn proximity(a: &str, b: &str) -> u8 {
-    match proximity_checked(a, b) {
-        Ok(p) => p,
-        Err(_) => 0, // Return 0 for invalid inputs (like beekeeper does)
-    }
+    proximity_checked(a, b).unwrap_or_default()
 }
 
 /// Calculate proximity with error handling

@@ -32,7 +32,7 @@ use tracing::{debug, info, warn};
 
 use super::traits::{Check, CheckContext, CheckError, CheckOptions, CheckResult, NodeResult};
 use crate::client::BeeClient;
-use crate::utils::{run_concurrent, ConcurrentOpts};
+use crate::utils::{ConcurrentOpts, run_concurrent};
 
 /// Pingpong connectivity check
 ///
@@ -76,8 +76,7 @@ impl Check for PingpongCheck {
 
         // Run ping tests concurrently across all nodes with fail-fast
         // Note: Retries are handled per-peer inside ping_node_peers, not at the node level
-        let concurrent_opts = ConcurrentOpts::default()
-            .with_fail_fast(true);
+        let concurrent_opts = ConcurrentOpts::default().with_fail_fast(true);
 
         let results = run_concurrent(
             ctx.nodes.clone(),
@@ -174,7 +173,7 @@ async fn ping_node_peers(
     let overlay = match node.addresses().await {
         Ok(addrs) => addrs.overlay,
         Err(e) => {
-            return Err(format!("Failed to get addresses: {}", e));
+            return Err(format!("Failed to get addresses: {e}"));
         }
     };
 
@@ -182,7 +181,7 @@ async fn ping_node_peers(
     let peers = match node.peers().await {
         Ok(p) => p,
         Err(e) => {
-            return Err(format!("Failed to get peers: {}", e));
+            return Err(format!("Failed to get peers: {e}"));
         }
     };
 
@@ -267,7 +266,7 @@ async fn ping_node_peers(
 
     // If all pings failed, this is a node-level failure
     if successful_pings == 0 && failed_pings > 0 {
-        return Err(format!("All {} pings failed", failed_pings));
+        return Err(format!("All {failed_pings} pings failed"));
     }
 
     Ok(NodePingResult {

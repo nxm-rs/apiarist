@@ -93,7 +93,13 @@ impl Chunk {
     pub fn closest_node_from_slice(&self, nodes: &[(&str, &str)]) -> Option<(String, String, u8)> {
         nodes
             .iter()
-            .map(|(name, overlay)| (name.to_string(), overlay.to_string(), proximity(&self.address, overlay)))
+            .map(|(name, overlay)| {
+                (
+                    name.to_string(),
+                    overlay.to_string(),
+                    proximity(&self.address, overlay),
+                )
+            })
             .max_by_key(|(_, _, prox)| *prox)
     }
 }

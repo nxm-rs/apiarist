@@ -16,8 +16,8 @@
 //! assert_eq!(rng1.random_bytes(100), rng2.random_bytes(100));
 //! ```
 
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 /// Seeded pseudo-random generator for reproducible test data
 #[derive(Debug)]

@@ -114,8 +114,7 @@ impl ClusterConfig {
             .nodes
             .iter()
             .map(|n| {
-                BeeClient::new(&n.api_url)
-                    .map(|c| c.with_name(&n.name).with_node_type(n.node_type))
+                BeeClient::new(&n.api_url).map(|c| c.with_name(&n.name).with_node_type(n.node_type))
             })
             .collect();
 

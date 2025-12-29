@@ -128,7 +128,7 @@ async fn run_checks(
     tracing::info!(config = %config_path, "Loading configuration");
 
     let config = Config::from_file(config_path)
-        .with_context(|| format!("Failed to load config from {}", config_path))?;
+        .with_context(|| format!("Failed to load config from {config_path}"))?;
 
     tracing::info!(
         cluster = %config.cluster.name,
@@ -283,14 +283,13 @@ fn init_config(output: &str) -> Result<()> {
     let config = Config::default_config();
     let yaml = config.to_yaml().context("Failed to serialize config")?;
 
-    std::fs::write(output, &yaml)
-        .with_context(|| format!("Failed to write config to {}", output))?;
+    std::fs::write(output, &yaml).with_context(|| format!("Failed to write config to {output}"))?;
 
     tracing::info!(path = %output, "Configuration file created");
-    println!("Created {}", output);
+    println!("Created {output}");
     println!();
     println!("Edit the file to configure your cluster, then run:");
-    println!("  apiarist check --config {}", output);
+    println!("  apiarist check --config {output}");
 
     Ok(())
 }
@@ -305,7 +304,7 @@ fn list_checks() {
     checks.sort_by_key(|(name, _)| *name);
 
     for (name, check) in checks {
-        println!("  {:20} - {}", name, check.description());
+        println!("  {name:20} - {}", check.description());
     }
 
     println!();
@@ -318,7 +317,7 @@ fn validate_config(config_path: &str) -> Result<()> {
     tracing::info!(config = %config_path, "Validating configuration");
 
     let config = Config::from_file(config_path)
-        .with_context(|| format!("Failed to load config from {}", config_path))?;
+        .with_context(|| format!("Failed to load config from {config_path}"))?;
 
     println!("Configuration is valid!");
     println!();
@@ -342,7 +341,7 @@ fn validate_config(config_path: &str) -> Result<()> {
         } else {
             "disabled"
         };
-        println!("  - {}: {}", name, status);
+        println!("  - {name}: {status}");
     }
 
     Ok(())

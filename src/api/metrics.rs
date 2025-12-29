@@ -54,7 +54,7 @@ pub async fn metrics_handler(State(state): State<ApiState>) -> impl IntoResponse
         ExecutionStatus::Completed => 1,
         ExecutionStatus::Failed => 2,
     };
-    writeln!(output, "apiarist_execution_status {}", status_value).unwrap();
+    writeln!(output, "apiarist_execution_status {status_value}").unwrap();
     writeln!(output).unwrap();
 
     // Checks total
@@ -64,7 +64,12 @@ pub async fn metrics_handler(State(state): State<ApiState>) -> impl IntoResponse
     )
     .unwrap();
     writeln!(output, "# TYPE apiarist_checks_total gauge").unwrap();
-    writeln!(output, "apiarist_checks_total {}", status_response.checks_total).unwrap();
+    writeln!(
+        output,
+        "apiarist_checks_total {}",
+        status_response.checks_total
+    )
+    .unwrap();
     writeln!(output).unwrap();
 
     // Checks completed

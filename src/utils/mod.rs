@@ -5,6 +5,6 @@
 pub mod concurrent;
 
 pub use concurrent::{
-    run_concurrent, run_concurrent_collect, ConcurrentError, ConcurrentOpts, HasId, TaskResult,
-    WithId,
+    ConcurrentError, ConcurrentOpts, HasId, TaskResult, WithId, run_concurrent,
+    run_concurrent_collect,
 };

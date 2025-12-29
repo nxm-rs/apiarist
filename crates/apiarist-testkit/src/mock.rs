@@ -164,7 +164,8 @@ impl MockCluster {
     ///
     /// Each node will have all other nodes as peers.
     pub fn fully_connected(mut self) -> Self {
-        let all_overlays: Vec<String> = self.all_nodes().iter().map(|n| n.overlay.clone()).collect();
+        let all_overlays: Vec<String> =
+            self.all_nodes().iter().map(|n| n.overlay.clone()).collect();
 
         if let Some(ref mut bn) = self.bootnode {
             bn.peers = all_overlays
@@ -207,7 +208,7 @@ pub fn create_test_cluster(node_count: usize) -> MockCluster {
 
     // Create worker nodes
     for i in 0..node_count {
-        let node = MockNode::new(format!("bee-{}", i), overlays[i + 1].clone());
+        let node = MockNode::new(format!("bee-{i}"), overlays[i + 1].clone());
         cluster.add_node(node);
     }
 
