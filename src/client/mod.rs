@@ -8,3 +8,6 @@ mod types;
 
 pub use bee::{BeeClient, BeeError, BeeResult};
 pub use types::*;
+
+// Re-export NodeType for convenience
+pub use crate::config::NodeType;

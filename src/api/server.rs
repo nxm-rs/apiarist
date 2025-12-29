@@ -8,6 +8,7 @@ use tokio::net::TcpListener;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+use super::metrics::metrics_handler;
 use super::state::{ApiState, ExecutionStatus, HealthResponse, ResultsResponse, StatusResponse};
 
 /// Start the API server on the given port
@@ -35,6 +36,7 @@ fn create_router(state: ApiState) -> Router {
         .route("/health", get(health_handler))
         .route("/status", get(status_handler))
         .route("/results", get(results_handler))
+        .route("/metrics", get(metrics_handler))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
