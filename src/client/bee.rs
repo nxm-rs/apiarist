@@ -252,6 +252,307 @@ impl BeeClient {
             })
         }
     }
+
+    // =========================================================================
+    // Chunk Endpoints
+    // OpenAPI: Swarm.yaml - /chunks, /chunks/{address}
+    // =========================================================================
+
+    /// Upload a chunk to the network
+    ///
+    /// OpenAPI: POST /chunks
+    /// Returns: ReferenceResponse with the chunk address
+    ///
+    /// # Arguments
+    /// * `batch_id` - Postage batch ID to use for upload
+    /// * `data` - Chunk data (span + payload, 8-4096 bytes)
+    pub async fn upload_chunk(
+        &self,
+        batch_id: &str,
+        data: impl Into<Vec<u8>>,
+    ) -> BeeResult<ReferenceResponse> {
+        let url = self.base_url.join("chunks")?;
+        let response = self
+            .client
+            .post(url)
+            .header("swarm-postage-batch-id", batch_id)
+            .header("content-type", "application/octet-stream")
+            .body(data.into())
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    /// Download a chunk from the network
+    ///
+    /// OpenAPI: GET /chunks/{address}
+    /// Returns: Raw chunk data (span + payload)
+    pub async fn download_chunk(&self, reference: &str) -> BeeResult<Vec<u8>> {
+        let url = self.base_url.join(&format!("chunks/{}", reference))?;
+        let response = self.client.get(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.bytes().await?.to_vec())
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    /// Check if a chunk exists locally
+    ///
+    /// OpenAPI: HEAD /chunks/{address}
+    /// Returns: true if chunk exists, false otherwise
+    pub async fn has_chunk(&self, reference: &str) -> BeeResult<bool> {
+        let url = self.base_url.join(&format!("chunks/{}", reference))?;
+        let response = self.client.head(url).send().await?;
+
+        Ok(response.status().is_success())
+    }
+
+    // =========================================================================
+    // Bytes Endpoints
+    // OpenAPI: Swarm.yaml - /bytes, /bytes/{reference}
+    // =========================================================================
+
+    /// Upload arbitrary data to the network
+    ///
+    /// OpenAPI: POST /bytes
+    /// Returns: ReferenceResponse with the data address
+    ///
+    /// # Arguments
+    /// * `batch_id` - Postage batch ID to use for upload
+    /// * `data` - Arbitrary data to upload
+    pub async fn upload_bytes(
+        &self,
+        batch_id: &str,
+        data: impl Into<Vec<u8>>,
+    ) -> BeeResult<ReferenceResponse> {
+        let url = self.base_url.join("bytes")?;
+        let response = self
+            .client
+            .post(url)
+            .header("swarm-postage-batch-id", batch_id)
+            .header("content-type", "application/octet-stream")
+            .body(data.into())
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    /// Download data from the network
+    ///
+    /// OpenAPI: GET /bytes/{reference}
+    /// Returns: Raw data bytes
+    pub async fn download_bytes(&self, reference: &str) -> BeeResult<Vec<u8>> {
+        let url = self.base_url.join(&format!("bytes/{}", reference))?;
+        let response = self.client.get(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.bytes().await?.to_vec())
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    // =========================================================================
+    // Postage Stamp Endpoints
+    // OpenAPI: Swarm.yaml - /stamps, /stamps/{batch_id}, /stamps/{amount}/{depth}
+    // =========================================================================
+
+    /// List all postage batches owned by this node
+    ///
+    /// OpenAPI: GET /stamps
+    /// Returns: PostageBatches
+    pub async fn list_stamps(&self) -> BeeResult<PostageBatches> {
+        let url = self.base_url.join("stamps")?;
+        let response = self.client.get(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    /// Get a specific postage batch by ID
+    ///
+    /// OpenAPI: GET /stamps/{batch_id}
+    /// Returns: PostageBatch
+    pub async fn get_stamp(&self, batch_id: &str) -> BeeResult<PostageBatch> {
+        let url = self.base_url.join(&format!("stamps/{}", batch_id))?;
+        let response = self.client.get(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    /// Buy a new postage batch
+    ///
+    /// OpenAPI: POST /stamps/{amount}/{depth}
+    /// Returns: BatchIdResponse with the new batch ID
+    ///
+    /// # Arguments
+    /// * `amount` - Amount of BZZ per chunk (as string for big integers)
+    /// * `depth` - Batch depth (log2 of max chunks, must be > 16)
+    /// * `label` - Optional label for the batch
+    pub async fn create_stamp(
+        &self,
+        amount: &str,
+        depth: u8,
+        label: Option<&str>,
+    ) -> BeeResult<BatchIdResponse> {
+        let mut url = self.base_url.join(&format!("stamps/{}/{}", amount, depth))?;
+
+        if let Some(lbl) = label {
+            url.query_pairs_mut().append_pair("label", lbl);
+        }
+
+        let response = self.client.post(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    // =========================================================================
+    // Tag Endpoints
+    // OpenAPI: Swarm.yaml - /tags, /tags/{uid}
+    // =========================================================================
+
+    /// Create a new upload tag for tracking
+    ///
+    /// OpenAPI: POST /tags
+    /// Returns: Tag with the new UID
+    pub async fn create_tag(&self) -> BeeResult<Tag> {
+        let url = self.base_url.join("tags")?;
+        let response = self.client.post(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    /// Get tag information by UID
+    ///
+    /// OpenAPI: GET /tags/{uid}
+    /// Returns: Tag
+    pub async fn get_tag(&self, uid: u64) -> BeeResult<Tag> {
+        let url = self.base_url.join(&format!("tags/{}", uid))?;
+        let response = self.client.get(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    // =========================================================================
+    // Wallet Endpoint
+    // OpenAPI: Swarm.yaml - /wallet
+    // =========================================================================
+
+    /// Get wallet balance (BZZ and native token)
+    ///
+    /// OpenAPI: GET /wallet
+    /// Returns: WalletBalance
+    pub async fn wallet(&self) -> BeeResult<WalletBalance> {
+        let url = self.base_url.join("wallet")?;
+        let response = self.client.get(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
 }
 
 // Implement HasId for BeeClient to enable use with concurrent utilities
