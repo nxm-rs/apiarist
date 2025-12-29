@@ -219,3 +219,136 @@ pub struct Readiness {
     #[serde(default)]
     pub api_version: Option<String>,
 }
+
+// =========================================================================
+// Data Operation Types (P1 checks)
+// =========================================================================
+
+/// Swarm reference (64 hex characters for chunk/content address)
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/SwarmReference
+pub type SwarmReference = String;
+
+/// Batch ID (64 hex characters)
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/BatchID
+pub type BatchId = String;
+
+/// Tag UID (unsigned integer)
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/Uid
+pub type TagUid = u64;
+
+/// Reference response from upload operations
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/ReferenceResponse
+/// Endpoints: POST /chunks, POST /bytes, POST /bzz
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReferenceResponse {
+    pub reference: SwarmReference,
+}
+
+/// Postage batch information
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/DebugPostageBatch
+/// Endpoint: GET /stamps/{batch_id}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostageBatch {
+    /// Batch ID
+    #[serde(rename = "batchID")]
+    pub batch_id: BatchId,
+    /// Utilization percentage (0-100)
+    pub utilization: u32,
+    /// Whether the batch is usable
+    pub usable: bool,
+    /// Optional label
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Depth (log2 of max chunks)
+    pub depth: u8,
+    /// Amount per chunk
+    #[serde(default)]
+    pub amount: Option<String>,
+    /// Bucket depth
+    #[serde(rename = "bucketDepth")]
+    pub bucket_depth: u8,
+    /// Block number when batch was created
+    #[serde(rename = "blockNumber")]
+    pub block_number: u64,
+    /// Whether batch is immutable
+    #[serde(rename = "immutableFlag")]
+    pub immutable: bool,
+    /// Exists flag
+    #[serde(default)]
+    pub exists: Option<bool>,
+    /// Batch TTL in blocks (if available)
+    #[serde(default, rename = "batchTTL")]
+    pub batch_ttl: Option<i64>,
+}
+
+/// List of postage batches
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/DebugPostageBatchesResponse
+/// Endpoint: GET /stamps
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostageBatches {
+    pub stamps: Vec<PostageBatch>,
+}
+
+/// Response when creating a new postage batch
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/BatchIDResponse
+/// Endpoint: POST /stamps/{amount}/{depth}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchIdResponse {
+    /// The batch ID (note: API uses "batchID" not "batch_id")
+    #[serde(rename = "batchID")]
+    pub batch_id: BatchId,
+    /// Transaction hash
+    #[serde(default, rename = "txHash")]
+    pub tx_hash: Option<String>,
+}
+
+/// Tag information for tracking uploads
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/NewTagResponse
+/// Endpoints: POST /tags, GET /tags/{uid}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tag {
+    /// Tag UID
+    pub uid: TagUid,
+    /// When the tag was started (ISO 8601)
+    pub started_at: String,
+    /// Chunks split during upload
+    #[serde(default)]
+    pub split: Option<u64>,
+    /// Chunks seen
+    #[serde(default)]
+    pub seen: Option<u64>,
+    /// Chunks stored locally
+    #[serde(default)]
+    pub stored: Option<u64>,
+    /// Chunks sent to network
+    #[serde(default)]
+    pub sent: Option<u64>,
+    /// Chunks synced to network
+    #[serde(default)]
+    pub synced: Option<u64>,
+    /// Root address (if upload complete)
+    #[serde(default)]
+    pub address: Option<String>,
+}
+
+/// Wallet balance response
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/WalletResponse
+/// Endpoint: GET /wallet
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WalletBalance {
+    /// BZZ balance
+    pub bzz_balance: String,
+    /// Native token (xDAI) balance
+    pub native_token_balance: String,
+    /// Chain ID
+    #[serde(default)]
+    pub chain_id: Option<u64>,
+    /// Chequebook contract address
+    #[serde(default)]
+    pub chequebook_contract_address: Option<String>,
+    /// Wallet address
+    #[serde(default)]
+    pub wallet_address: Option<String>,
+}
