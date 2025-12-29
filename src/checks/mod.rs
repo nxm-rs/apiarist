@@ -21,10 +21,12 @@ mod fullconnectivity;
 mod peercount;
 mod pingpong;
 pub mod registry;
+mod smoke;
 mod traits;
 
 pub use fullconnectivity::FullconnectivityCheck;
 pub use peercount::PeercountCheck;
 pub use pingpong::PingpongCheck;
 pub use registry::CHECKS;
+pub use smoke::SmokeCheck;
 pub use traits::*;

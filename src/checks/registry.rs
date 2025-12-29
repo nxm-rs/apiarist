@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::traits::Check;
-use super::{FullconnectivityCheck, PeercountCheck, PingpongCheck};
+use super::{FullconnectivityCheck, PeercountCheck, PingpongCheck, SmokeCheck};
 
 /// Global registry of all available checks
 pub static CHECKS: Lazy<HashMap<&'static str, Arc<dyn Check>>> = Lazy::new(|| {
@@ -18,8 +18,8 @@ pub static CHECKS: Lazy<HashMap<&'static str, Arc<dyn Check>>> = Lazy::new(|| {
     m.insert("peercount", Arc::new(PeercountCheck));
     m.insert("fullconnectivity", Arc::new(FullconnectivityCheck));
 
-    // P1: Content checks (TODO)
-    // m.insert("smoke", Arc::new(SmokeCheck));
+    // P1: Content checks
+    m.insert("smoke", Arc::new(SmokeCheck));
     // m.insert("pushsync", Arc::new(PushsyncCheck));
     // m.insert("retrieval", Arc::new(RetrievalCheck));
     // m.insert("fileretrieval", Arc::new(FileretrievalCheck));
@@ -60,6 +60,11 @@ mod tests {
         assert!(CHECKS.contains_key("pingpong"));
         assert!(CHECKS.contains_key("peercount"));
         assert!(CHECKS.contains_key("fullconnectivity"));
+    }
+
+    #[test]
+    fn test_p1_checks_registered() {
+        assert!(CHECKS.contains_key("smoke"));
     }
 
     #[test]
