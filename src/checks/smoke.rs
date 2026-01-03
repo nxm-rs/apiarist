@@ -39,10 +39,19 @@ use super::traits::{Check, CheckContext, CheckError, CheckOptions, CheckResult, 
 const DEFAULT_DATA_SIZE: usize = 1024;
 
 /// Default sync wait after upload before downloading (to allow network sync)
-const DEFAULT_SYNC_WAIT_MS: u64 = 2000;
+/// With batches pre-created and warmup disabled (BEE_WARMUP_TIME=0s), chunks
+/// propagate quickly in local devnets. We use 5 seconds as a reasonable wait.
+/// For slower networks, this can be increased via check options.
+const DEFAULT_SYNC_WAIT_MS: u64 = 5_000;
 
 /// Default wait between iterations in long-running mode (seconds)
 const DEFAULT_ITERATION_WAIT_SECS: u64 = 5;
+
+/// Number of retries for upload/download operations (like beekeeper's 3 retries)
+const DEFAULT_RETRIES: usize = 3;
+
+/// Wait time between retries in milliseconds (like beekeeper's TxOnErrWait/RxOnErrWait = 10s)
+const DEFAULT_RETRY_WAIT_MS: u64 = 10_000;
 
 /// Statistics for a single iteration
 #[derive(Debug, Clone, Default)]
@@ -77,37 +86,6 @@ impl IterationStats {
 pub struct SmokeCheck;
 
 impl SmokeCheck {
-    /// Find a usable postage batch from the cluster
-    /// Returns (batch_id, node_index) where node_index is the position in ctx.nodes
-    async fn find_usable_batch(ctx: &CheckContext) -> Result<(String, usize), CheckError> {
-        for (idx, node) in ctx.nodes.iter().enumerate() {
-            let node_name = node.name().unwrap_or("unknown").to_string();
-            debug!(node = %node_name, "Looking for usable stamp");
-
-            match node.list_stamps().await {
-                Ok(stamps) => {
-                    for stamp in stamps.stamps {
-                        if stamp.usable {
-                            info!(
-                                node = %node_name,
-                                batch_id = %stamp.batch_id,
-                                "Found usable stamp"
-                            );
-                            return Ok((stamp.batch_id, idx));
-                        }
-                    }
-                }
-                Err(e) => {
-                    debug!(node = %node_name, error = %e, "Failed to list stamps");
-                }
-            }
-        }
-
-        Err(CheckError::Config(
-            "No usable postage batch found in cluster. Please create one first.".to_string(),
-        ))
-    }
-
     /// Generate random data of the specified size with the given seed state
     fn generate_data(size: usize, seed: &mut u64) -> Vec<u8> {
         let mut data = Vec::with_capacity(size);
@@ -124,13 +102,19 @@ impl SmokeCheck {
     }
 
     /// Run a single upload/download iteration for one file size
+    ///
+    /// Like beekeeper, this uses exactly TWO full nodes: one uploader and one downloader.
+    /// It does NOT download from all nodes - just the designated downloader.
+    /// Includes retry logic matching beekeeper (3 retries with 10s wait).
     async fn run_iteration(
-        ctx: &CheckContext,
+        upload_node: &crate::client::BeeClient,
+        download_node: &crate::client::BeeClient,
         batch_id: &str,
-        upload_node_idx: usize,
         data_size: usize,
         seed: &mut u64,
         sync_wait_ms: u64,
+        retries: usize,
+        retry_wait_ms: u64,
         node_results: &mut Vec<NodeResult>,
     ) -> IterationStats {
         let mut stats = IterationStats::default();
@@ -139,35 +123,62 @@ impl SmokeCheck {
         let data = Self::generate_data(data_size, seed);
         debug!(data_size = data.len(), "Generated random data");
 
-        // Use the node that has the batch for uploads
-        let upload_node = &ctx.nodes[upload_node_idx];
         let upload_node_name = upload_node.name().unwrap_or("upload_node").to_string();
+        let download_node_name = download_node.name().unwrap_or("download_node").to_string();
 
-        // Upload data
+        // Upload data with retries (like beekeeper's upload retry loop)
         stats.uploads_attempted += 1;
-        info!(node = %upload_node_name, data_size = data.len(), "Uploading data");
+        let mut reference: Option<String> = None;
+        let mut last_upload_error: Option<String> = None;
 
-        let reference = match upload_node.upload_bytes(batch_id, data.clone()).await {
-            Ok(resp) => {
-                stats.uploads_succeeded += 1;
-                stats.data_uploaded_bytes += data_size as u64;
+        for attempt in 0..retries {
+            if attempt > 0 {
                 info!(
                     node = %upload_node_name,
-                    reference = %resp.reference,
-                    "Upload successful"
+                    attempt = attempt + 1,
+                    retries = retries,
+                    wait_ms = retry_wait_ms,
+                    "Retrying upload"
                 );
-                node_results.push(
-                    NodeResult::passed(&upload_node_name)
-                        .with_detail("action", "upload")
-                        .with_detail("reference", &resp.reference)
-                        .with_detail("data_size", data_size),
-                );
-                resp.reference
+                tokio::time::sleep(Duration::from_millis(retry_wait_ms)).await;
             }
-            Err(e) => {
-                error!(node = %upload_node_name, error = %e, "Upload failed");
+
+            info!(node = %upload_node_name, data_size = data.len(), attempt = attempt + 1, "Uploading data");
+
+            match upload_node.upload_bytes(batch_id, data.clone()).await {
+                Ok(resp) => {
+                    stats.uploads_succeeded += 1;
+                    stats.data_uploaded_bytes += data_size as u64;
+                    info!(
+                        node = %upload_node_name,
+                        reference = %resp.reference,
+                        attempt = attempt + 1,
+                        "Upload successful"
+                    );
+                    node_results.push(
+                        NodeResult::passed(&upload_node_name)
+                            .with_detail("action", "upload")
+                            .with_detail("reference", &resp.reference)
+                            .with_detail("data_size", data_size)
+                            .with_detail("attempts", attempt + 1),
+                    );
+                    reference = Some(resp.reference);
+                    break;
+                }
+                Err(e) => {
+                    warn!(node = %upload_node_name, error = %e, attempt = attempt + 1, "Upload failed");
+                    last_upload_error = Some(format!("{e}"));
+                }
+            }
+        }
+
+        let reference = match reference {
+            Some(r) => r,
+            None => {
+                let err_msg = last_upload_error.unwrap_or_else(|| "Unknown error".to_string());
+                error!(node = %upload_node_name, error = %err_msg, retries = retries, "Upload failed after all retries");
                 node_results.push(
-                    NodeResult::failed(&upload_node_name, format!("Upload failed: {e}"))
+                    NodeResult::failed(&upload_node_name, format!("Upload failed after {retries} attempts: {err_msg}"))
                         .with_detail("action", "upload")
                         .with_detail("data_size", data_size),
                 );
@@ -181,40 +192,58 @@ impl SmokeCheck {
             tokio::time::sleep(Duration::from_millis(sync_wait_ms)).await;
         }
 
-        // Download from each other node
-        for node in &ctx.nodes {
-            // Skip the upload node
-            if std::ptr::eq(node.as_ref(), upload_node.as_ref()) {
-                continue;
+        // Download from the designated download node with retries (like beekeeper's download retry loop)
+        stats.downloads_attempted += 1;
+        let mut download_success = false;
+        let mut last_download_error: Option<String> = None;
+
+        for attempt in 0..retries {
+            if attempt > 0 {
+                info!(
+                    node = %download_node_name,
+                    attempt = attempt + 1,
+                    retries = retries,
+                    wait_ms = retry_wait_ms,
+                    "Retrying download"
+                );
+                tokio::time::sleep(Duration::from_millis(retry_wait_ms)).await;
             }
 
-            stats.downloads_attempted += 1;
-            let node_name = node.name().unwrap_or("unknown").to_string();
-            debug!(node = %node_name, reference = %reference, "Downloading data");
+            debug!(node = %download_node_name, reference = %reference, attempt = attempt + 1, "Downloading data");
 
-            match node.download_bytes(&reference).await {
+            match download_node.download_bytes(&reference).await {
                 Ok(downloaded) => {
                     if downloaded == data {
                         stats.downloads_succeeded += 1;
                         stats.data_downloaded_bytes += downloaded.len() as u64;
-                        info!(node = %node_name, "Download successful, data matches");
+                        info!(node = %download_node_name, attempt = attempt + 1, "Download successful, data matches");
                         node_results.push(
-                            NodeResult::passed(&node_name)
+                            NodeResult::passed(&download_node_name)
                                 .with_detail("action", "download")
                                 .with_detail("reference", &reference)
-                                .with_detail("data_size", downloaded.len()),
+                                .with_detail("data_size", downloaded.len())
+                                .with_detail("attempts", attempt + 1),
                         );
+                        download_success = true;
+                        break;
                     } else {
                         stats.mismatches += 1;
                         warn!(
-                            node = %node_name,
+                            node = %download_node_name,
                             expected_size = data.len(),
                             actual_size = downloaded.len(),
+                            attempt = attempt + 1,
                             "Data mismatch"
                         );
+                        last_download_error = Some(format!(
+                            "Data mismatch: expected {} bytes, got {}",
+                            data.len(),
+                            downloaded.len()
+                        ));
+                        // Data mismatch is not retryable
                         node_results.push(
                             NodeResult::failed(
-                                &node_name,
+                                &download_node_name,
                                 format!(
                                     "Data mismatch: expected {} bytes, got {}",
                                     data.len(),
@@ -225,16 +254,24 @@ impl SmokeCheck {
                             .with_detail("expected_size", data.len())
                             .with_detail("actual_size", downloaded.len()),
                         );
+                        break;
                     }
                 }
                 Err(e) => {
-                    warn!(node = %node_name, error = %e, "Download failed");
-                    node_results.push(
-                        NodeResult::failed(&node_name, format!("Download failed: {e}"))
-                            .with_detail("action", "download"),
-                    );
+                    warn!(node = %download_node_name, error = %e, attempt = attempt + 1, "Download failed");
+                    last_download_error = Some(format!("{e}"));
                 }
             }
+        }
+
+        if !download_success && stats.mismatches == 0 {
+            let err_msg = last_download_error.unwrap_or_else(|| "Unknown error".to_string());
+            error!(node = %download_node_name, error = %err_msg, retries = retries, "Download failed after all retries");
+            node_results.push(
+                NodeResult::failed(&download_node_name, format!("Download failed after {retries} attempts: {err_msg}"))
+                    .with_detail("action", "download")
+                    .with_detail("reference", &reference),
+            );
         }
 
         stats
@@ -258,13 +295,6 @@ impl Check for SmokeCheck {
     ) -> Result<CheckResult, CheckError> {
         let start = Instant::now();
 
-        // Need at least 2 nodes for meaningful smoke test
-        if ctx.node_count() < 2 {
-            return Err(CheckError::Config(
-                "Smoke check requires at least 2 nodes".to_string(),
-            ));
-        }
-
         // Get options
         let duration_secs: u64 = opts.get_extra("duration_secs").unwrap_or(0);
         let file_sizes: Vec<usize> = opts
@@ -286,8 +316,25 @@ impl Check for SmokeCheck {
 
         let is_long_running = duration_secs > 0;
 
+        // Like beekeeper's smoke check, we need exactly 2 full nodes (not bootnodes)
+        // Beekeeper uses ShuffledFullNodeClients and picks [0] as uploader, [1] as downloader
+        let full_nodes = ctx.full_nodes();
+        if full_nodes.len() < 2 {
+            return Err(CheckError::Config(
+                "Smoke check requires at least 2 full nodes (not bootnodes)".to_string(),
+            ));
+        }
+
+        // Use first full node as uploader, second as downloader (like beekeeper)
+        let upload_node = &full_nodes[0];
+        let download_node = &full_nodes[1];
+        let upload_node_name = upload_node.name().unwrap_or("unknown");
+        let download_node_name = download_node.name().unwrap_or("unknown");
+
         info!(
-            nodes = ctx.node_count(),
+            full_nodes = full_nodes.len(),
+            upload_node = %upload_node_name,
+            download_node = %download_node_name,
             file_sizes = ?file_sizes,
             seed = seed,
             duration_secs = duration_secs,
@@ -295,26 +342,26 @@ impl Check for SmokeCheck {
             "Starting smoke check"
         );
 
-        // Find or use specified batch
-        // upload_node_idx is the index of the node that has the batch (and should be used for uploads)
-        let (batch_id, upload_node_idx) = if let Some(bid) = specified_batch {
-            // If batch is specified, use first full-capable node or first node
-            let idx = ctx
-                .full_capable_nodes()
-                .first()
-                .and_then(|n| {
-                    ctx.nodes
-                        .iter()
-                        .position(|x| std::ptr::eq(x.as_ref(), n.as_ref()))
-                })
-                .unwrap_or(0);
-            (bid, idx)
+        // Get or create batch on the upload node
+        let batch_id = if let Some(bid) = specified_batch {
+            bid
         } else {
-            Self::find_usable_batch(ctx).await?
+            let batch_opts = crate::client::BatchOptions::default();
+            match upload_node.get_or_create_batch(&batch_opts).await {
+                Ok(bid) => {
+                    debug!(node = %upload_node_name, batch_id = %bid, "Got batch for smoke check");
+                    bid
+                }
+                Err(e) => {
+                    return Err(CheckError::Config(format!(
+                        "Failed to get/create batch on {}: {}",
+                        upload_node_name, e
+                    )));
+                }
+            }
         };
 
-        let batch_node_name = ctx.nodes[upload_node_idx].name().unwrap_or("unknown");
-        debug!(batch_id = %batch_id, from_node = %batch_node_name, "Using batch");
+        debug!(batch_id = %batch_id, from_node = %upload_node_name, "Using batch");
 
         let mut all_node_results = Vec::new();
         let mut total_stats = IterationStats::default();
@@ -335,12 +382,14 @@ impl Check for SmokeCheck {
             for &file_size in &file_sizes {
                 let mut iter_results = Vec::new();
                 let stats = Self::run_iteration(
-                    ctx,
+                    upload_node.as_ref(),
+                    download_node.as_ref(),
                     &batch_id,
-                    upload_node_idx,
                     file_size,
                     &mut current_seed,
                     sync_wait_ms,
+                    DEFAULT_RETRIES,
+                    DEFAULT_RETRY_WAIT_MS,
                     &mut iter_results,
                 )
                 .await;
