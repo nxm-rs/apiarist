@@ -9,10 +9,6 @@ keywords = ["swarm", "ethereum", "testing", "utilities"]
 categories = ["development-tools::testing"]
 
 [dependencies]
-# Crypto
-sha3 = "0.10"
-hex = "0.4"
-
 # Random
 rand = "0.9"
 
