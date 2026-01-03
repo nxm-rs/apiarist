@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use apiarist::api::{ApiState, start_api_server};
+use apiarist::batch::prepare_batches;
 use apiarist::checks::{Check, registry::CHECKS};
 use apiarist::config::Config;
 
@@ -143,6 +144,34 @@ async fn run_checks(
         .to_check_context()
         .context("Failed to create check context")?;
 
+    // Check if any data checks will run (smoke, pushsync, retrieval)
+    // If so, prepare batches upfront to avoid per-check batch creation delays
+    let data_checks = ["smoke", "pushsync", "retrieval"];
+    let needs_batches = check_filter
+        .map(|f| f.split(',').any(|c| data_checks.contains(&c.trim())))
+        .unwrap_or_else(|| {
+            data_checks
+                .iter()
+                .any(|c| config.is_check_enabled(c))
+        });
+
+    if needs_batches {
+        tracing::info!("Preparing postage batches on full nodes...");
+        match prepare_batches(&ctx, None).await {
+            Ok(result) => {
+                tracing::info!(
+                    created = result.batches_created,
+                    reused = result.batches_reused,
+                    duration_secs = result.duration.as_secs(),
+                    "Batch preparation complete"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "Batch preparation failed, checks may be slower");
+            }
+        }
+    }
+
     // Determine which checks to run
     let checks_to_run: Vec<Arc<dyn Check>> = if let Some(filter) = check_filter {
         // Run specific checks
@@ -189,66 +218,90 @@ async fn run_checks(
     tracing::info!(
         count = checks_to_run.len(),
         checks = ?checks_to_run.iter().map(|c| c.name()).collect::<Vec<_>>(),
-        "Running checks"
+        "Running checks in parallel"
     );
 
-    let mut all_passed = true;
+    // Run all checks in parallel
+    let ctx = Arc::new(ctx);
+    let config = Arc::new(config);
 
+    let mut handles = Vec::new();
     for check in checks_to_run {
-        let check_name = check.name();
-        tracing::info!(check = check_name, "Starting check");
-        api_state.start_check(check_name);
+        let check_name = check.name().to_string();
+        let ctx = Arc::clone(&ctx);
+        let config = Arc::clone(&config);
+        let api_state = api_state.clone();
 
         // Get options from config or use defaults
         let opts = config
-            .check_config(check_name)
+            .check_config(&check_name)
             .map(|c| c.to_check_options(&check.default_options()))
             .unwrap_or_else(|| check.default_options());
 
-        match check.run(&ctx, &opts).await {
-            Ok(result) => {
-                let passed = result.passed;
-                if passed {
-                    tracing::info!(
-                        check = check_name,
-                        duration_ms = result.duration.as_millis(),
-                        message = ?result.message,
-                        "Check PASSED"
-                    );
-                } else {
-                    tracing::error!(
-                        check = check_name,
-                        duration_ms = result.duration.as_millis(),
-                        message = ?result.message,
-                        failed_nodes = result.node_results.iter().filter(|r| !r.passed).count(),
-                        "Check FAILED"
-                    );
-                    all_passed = false;
-                }
+        handles.push(tokio::spawn(async move {
+            tracing::info!(check = %check_name, "Starting check");
+            api_state.start_check(&check_name);
 
-                // Log individual node results at debug level
-                for node_result in &result.node_results {
-                    if node_result.passed {
-                        tracing::debug!(
-                            check = check_name,
-                            node = %node_result.node,
-                            "Node passed"
-                        );
-                    } else {
-                        tracing::warn!(
-                            check = check_name,
-                            node = %node_result.node,
-                            error = ?node_result.error,
-                            "Node failed"
-                        );
+            let result = check.run(&ctx, &opts).await;
+            (check_name, result, api_state)
+        }));
+    }
+
+    // Wait for all checks to complete and collect results
+    let mut all_passed = true;
+    for handle in handles {
+        match handle.await {
+            Ok((check_name, result, api_state)) => {
+                match result {
+                    Ok(result) => {
+                        let passed = result.passed;
+                        if passed {
+                            tracing::info!(
+                                check = %check_name,
+                                duration_ms = result.duration.as_millis(),
+                                message = ?result.message,
+                                "Check PASSED"
+                            );
+                        } else {
+                            tracing::error!(
+                                check = %check_name,
+                                duration_ms = result.duration.as_millis(),
+                                message = ?result.message,
+                                failed_nodes = result.node_results.iter().filter(|r| !r.passed).count(),
+                                "Check FAILED"
+                            );
+                            all_passed = false;
+                        }
+
+                        // Log individual node results at debug level
+                        for node_result in &result.node_results {
+                            if node_result.passed {
+                                tracing::debug!(
+                                    check = %check_name,
+                                    node = %node_result.node,
+                                    "Node passed"
+                                );
+                            } else {
+                                tracing::warn!(
+                                    check = %check_name,
+                                    node = %node_result.node,
+                                    error = ?node_result.error,
+                                    "Node failed"
+                                );
+                            }
+                        }
+
+                        // Record result in API state
+                        api_state.record_result(result);
+                    }
+                    Err(e) => {
+                        tracing::error!(check = %check_name, error = %e, "Check error");
+                        all_passed = false;
                     }
                 }
-
-                // Record result in API state
-                api_state.record_result(result);
             }
             Err(e) => {
-                tracing::error!(check = check_name, error = %e, "Check error");
+                tracing::error!(error = %e, "Check task panicked");
                 all_passed = false;
             }
         }
