@@ -9,9 +9,10 @@ This document tracks the implementation status of checks in apiarist compared to
 | pingpong | ✅ | ✅ | Implemented | Parity |
 | peercount | ✅ | ✅ | Implemented | Semantic difference (see below) |
 | fullconnectivity | ✅ | ✅ | Implemented | Parity with node-type awareness (see below) |
+| smoke | ✅ | ✅ | Implemented | Single-shot and long-running modes |
 | kademlia | ✅ | ❌ | Removed | Fundamentally flawed (see below) |
-| pushsync | ✅ | ❌ | Pending | Priority: High |
-| retrieval | ✅ | ❌ | Pending | Priority: High |
+| pushsync | ✅ | ✅ | Implemented | Parity (see below for batch handling) |
+| retrieval | ✅ | ✅ | Implemented | Parity (see below for batch handling) |
 | settlements | ✅ | ❌ | Pending | |
 | postage | ✅ | ❌ | Pending | |
 | pss | ✅ | ❌ | Pending | |
@@ -25,7 +26,6 @@ This document tracks the implementation status of checks in apiarist compared to
 | stake | ✅ | ❌ | Pending | |
 | withdraw | ✅ | ❌ | Pending | |
 | gc | ✅ | ❌ | Pending | |
-| smoke | ✅ | ❌ | Pending | |
 | load | ✅ | ❌ | Pending | |
 | redundancy | ✅ | ❌ | Pending | |
 | fileretrieval | ✅ | ❌ | Pending | |
@@ -119,8 +119,103 @@ The default checks for Kurtosis testing are:
 - `pingpong` - Basic P2P connectivity
 - `peercount` - Nodes have connected peers
 - `fullconnectivity` - All nodes can reach all other nodes
+- `smoke` - Basic upload/download sanity check
 
 These provide core interoperability validation. Higher-level protocol tests (pushsync, retrieval) should be added as P1 checks.
+
+### smoke
+
+**Beekeeper behavior**: Long-running continuous upload/download test with configurable duration and file sizes.
+
+**Apiarist behavior**: Supports both modes:
+- **Single-shot** (default): Upload once, verify download from all nodes
+- **Long-running**: Continuous testing with `duration_secs`, multiple `file_sizes`, configurable `sync_wait_ms` and `iteration_wait_secs`
+
+**Options**:
+- `duration_secs`: Total run duration (0 = single-shot, default)
+- `file_sizes`: Array of sizes to test per iteration (default: [1024])
+- `sync_wait_ms`: Wait after upload for network sync (default: 2000)
+- `iteration_wait_secs`: Wait between iterations (default: 5)
+- `seed`: PRNG seed for reproducibility
+- `batch_id`: Specific batch to use (auto-detect if not set)
+
+**Implementation note**: Uploads are performed from the node that owns the postage batch to ensure the batch is available.
+
+### pushsync
+
+**Beekeeper behavior**:
+- Uses `cluster.NodeNames()` for upload nodes (ALL nodes including boot, full, light)
+- Uses `GetOrCreateMutableBatch()` which creates a batch if needed
+- Per-node PRNG seeded from master seed via `PseudoGenerators(seed, n)`
+- Random chunk sizes (0-4095 bytes) via `r.Intn(MaxChunkSize)`
+- Checks if chunk synced to closest node with retries
+
+**Apiarist behavior**:
+- Uses ALL nodes (`ctx.nodes`) for upload nodes (matches beekeeper)
+- Per-node PRNG seeded from master seed (matches beekeeper's `PseudoGenerators`)
+- Random chunk sizes 0-4095 bytes (matches beekeeper)
+- Uses `get_or_create_batch()` per upload node (matches beekeeper's `GetOrCreateMutableBatch`)
+- Checks if chunk synced to closest node with retries
+
+**Options**:
+- `chunks_per_node`: Chunks to upload per node (default: 1)
+- `upload_node_count`: Number of nodes to upload from (default: 1)
+- `seed`: PRNG seed for reproducibility
+- `retries`: Retry count for sync verification (default: 5)
+- `retry_delay_ms`: Delay between retries (default: 1000)
+
+**Batch handling**: Apiarist now implements `get_or_create_batch()` which mirrors beekeeper's `GetOrCreateMutableBatch()`. Each check creates/reuses batches on-demand per upload node, exactly like beekeeper. This follows the architectural principle that apiary handles infrastructure (nodes, network, contracts) while apiarist handles application-level operations (batch creation, uploads, verification).
+
+### retrieval
+
+**Beekeeper behavior**:
+- Uses `cluster.FullNodeNames()` for node selection (only full nodes)
+- Upload from node[i], download from node[(i+1) % len(nodes)]
+- Uses `GetOrCreateMutableBatch()` for batch management
+- Per-node PRNG seeded from master seed
+- Random chunk sizes 0-4095 bytes
+- Compares `chunk.Data()` (span + payload) for verification
+
+**Apiarist behavior**:
+- Uses `full_capable_nodes()` for node selection (matches beekeeper's FullNodeNames)
+- Same round-robin download node selection as beekeeper
+- Per-node PRNG seeded from master seed (matches beekeeper)
+- Random chunk sizes 0-4095 bytes (matches beekeeper)
+- Compares full chunk data (span + payload) for verification (matches beekeeper)
+- Uses `get_or_create_batch()` per upload node (matches beekeeper's `GetOrCreateMutableBatch`)
+
+**Options**:
+- `chunks_per_node`: Chunks to upload per node (default: 1)
+- `upload_node_count`: Number of nodes to upload from (default: 1)
+- `seed`: PRNG seed for reproducibility
+
+**Data format note**: Chunks are uploaded with 8-byte span prefix (little-endian payload length) followed by payload. Downloaded data is compared against this full format (span + payload), matching beekeeper behavior exactly.
+
+## Architectural Separation: Apiary vs Apiarist
+
+The apiary/apiarist architecture follows a clear separation of concerns:
+
+**Apiary (Kurtosis package)** handles infrastructure:
+- Ethereum client (Reth)
+- Smart contract deployment
+- Node key generation
+- Node funding (ETH/BZZ)
+- Bee node deployment (boot, full, light)
+- Network connectivity and peer discovery
+- Observability stack (Prometheus, Grafana, Tempo)
+
+**Apiarist (Rust testing tool)** handles application operations:
+- Postage batch creation (`get_or_create_batch()`)
+- Chunk uploads and downloads
+- Data verification
+- Protocol testing (pushsync, retrieval)
+- Result reporting
+
+This separation means:
+1. Apiary configures the **environment** - nodes can start and connect
+2. Apiarist performs **application-level testing** - using the network as a user would
+
+Batch creation is explicitly an application operation (paying BZZ to store data), not infrastructure setup. This mirrors beekeeper's design where `GetOrCreateMutableBatch()` is called by checks, not by cluster setup.
 
 ## Adding New Checks
 
