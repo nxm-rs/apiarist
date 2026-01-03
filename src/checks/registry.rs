@@ -18,7 +18,9 @@ use once_cell::sync::Lazy;
 use std::sync::Arc;
 
 use super::traits::Check;
-use super::{FullconnectivityCheck, PeercountCheck, PingpongCheck, PushsyncCheck, RetrievalCheck, SmokeCheck};
+use super::{
+    FullconnectivityCheck, PeercountCheck, PingpongCheck, PushsyncCheck, RetrievalCheck, SmokeCheck,
+};
 
 /// Global registry of all available checks
 ///

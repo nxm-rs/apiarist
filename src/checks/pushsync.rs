@@ -64,7 +64,9 @@ struct XorShiftRng {
 impl XorShiftRng {
     fn new(seed: u64) -> Self {
         // Ensure non-zero state
-        Self { state: if seed == 0 { 1 } else { seed } }
+        Self {
+            state: if seed == 0 { 1 } else { seed },
+        }
     }
 
     fn next(&mut self) -> u64 {
@@ -230,7 +232,8 @@ impl Check for PushsyncCheck {
         let full_nodes = ctx.full_nodes();
         if full_nodes.is_empty() {
             return Err(CheckError::Config(
-                "Pushsync check requires at least one full node (not bootnode) for uploads".to_string(),
+                "Pushsync check requires at least one full node (not bootnode) for uploads"
+                    .to_string(),
             ));
         }
 
@@ -255,9 +258,10 @@ impl Check for PushsyncCheck {
                 }
                 Err(e) => {
                     error!(node = %upload_node_name, error = %e, "Failed to get/create batch");
-                    all_results.push(
-                        NodeResult::failed(&upload_node_name, format!("Failed to get/create batch: {}", e))
-                    );
+                    all_results.push(NodeResult::failed(
+                        &upload_node_name,
+                        format!("Failed to get/create batch: {}", e),
+                    ));
                     continue;
                 }
             };
@@ -277,9 +281,10 @@ impl Check for PushsyncCheck {
                     Ok(c) => c,
                     Err(e) => {
                         error!(error = %e, "Failed to create chunk");
-                        all_results.push(
-                            NodeResult::failed(&upload_node_name, format!("Failed to create chunk: {}", e))
-                        );
+                        all_results.push(NodeResult::failed(
+                            &upload_node_name,
+                            format!("Failed to create chunk: {}", e),
+                        ));
                         continue;
                     }
                 };
@@ -313,10 +318,14 @@ impl Check for PushsyncCheck {
                             wait_ms = DEFAULT_UPLOAD_RETRY_WAIT_MS,
                             "Retrying upload"
                         );
-                        tokio::time::sleep(Duration::from_millis(DEFAULT_UPLOAD_RETRY_WAIT_MS)).await;
+                        tokio::time::sleep(Duration::from_millis(DEFAULT_UPLOAD_RETRY_WAIT_MS))
+                            .await;
                     }
 
-                    match upload_node.upload_chunk(&node_batch_id, chunk_data.clone()).await {
+                    match upload_node
+                        .upload_chunk(&node_batch_id, chunk_data.clone())
+                        .await
+                    {
                         Ok(resp) => {
                             reference = Some(resp.reference);
                             break;
@@ -338,16 +347,18 @@ impl Check for PushsyncCheck {
                         );
 
                         // Find the closest node
-                        let (closest_name, closest_overlay) = match Self::find_closest_node(&chunk_address, &overlays) {
-                            Some(result) => result,
-                            None => {
-                                error!("No closest node found");
-                                all_results.push(
-                                    NodeResult::failed(&upload_node_name, "No closest node found")
-                                );
-                                continue;
-                            }
-                        };
+                        let (closest_name, closest_overlay) =
+                            match Self::find_closest_node(&chunk_address, &overlays) {
+                                Some(result) => result,
+                                None => {
+                                    error!("No closest node found");
+                                    all_results.push(NodeResult::failed(
+                                        &upload_node_name,
+                                        "No closest node found",
+                                    ));
+                                    continue;
+                                }
+                            };
 
                         let proximity = chunk_address.proximity(closest_overlay);
                         info!(
@@ -357,17 +368,19 @@ impl Check for PushsyncCheck {
                         );
 
                         // Find the closest node's client
-                        let closest_node = ctx.nodes.iter().find(|n| {
-                            n.name().map(|name| name == closest_name).unwrap_or(false)
-                        });
+                        let closest_node = ctx
+                            .nodes
+                            .iter()
+                            .find(|n| n.name().map(|name| name == closest_name).unwrap_or(false));
 
                         let closest_node = match closest_node {
                             Some(n) => n,
                             None => {
                                 error!(node = %closest_name, "Closest node not found in context");
-                                all_results.push(
-                                    NodeResult::failed(closest_name, "Node not found in context")
-                                );
+                                all_results.push(NodeResult::failed(
+                                    closest_name,
+                                    "Node not found in context",
+                                ));
                                 continue;
                             }
                         };
@@ -379,7 +392,7 @@ impl Check for PushsyncCheck {
                                 tokio::time::sleep(Duration::from_millis(retry_delay_ms)).await;
                             }
 
-                            match closest_node.has_chunk(&uploaded_reference).await {
+                            match closest_node.has_chunk(uploaded_reference).await {
                                 Ok(true) => {
                                     synced = true;
                                     break;
@@ -414,7 +427,7 @@ impl Check for PushsyncCheck {
                                 NodeResult::passed(closest_name)
                                     .with_detail("action", "pushsync")
                                     .with_detail("chunk", uploaded_reference.clone())
-                                    .with_detail("proximity", proximity as usize)
+                                    .with_detail("proximity", proximity as usize),
                             );
                         } else {
                             error!(
@@ -425,19 +438,27 @@ impl Check for PushsyncCheck {
                             all_results.push(
                                 NodeResult::failed(
                                     closest_name,
-                                    format!("Chunk {} not synced after {} retries", uploaded_reference, retries)
+                                    format!(
+                                        "Chunk {} not synced after {} retries",
+                                        uploaded_reference, retries
+                                    ),
                                 )
                                 .with_detail("action", "pushsync")
-                                .with_detail("chunk", uploaded_reference)
+                                .with_detail("chunk", uploaded_reference),
                             );
                         }
                     }
                     None => {
-                        let err_msg = last_upload_error.unwrap_or_else(|| "Unknown error".to_string());
+                        let err_msg =
+                            last_upload_error.unwrap_or_else(|| "Unknown error".to_string());
                         error!(node = %upload_node_name, error = %err_msg, retries = DEFAULT_UPLOAD_RETRIES, "Upload failed after all retries");
-                        all_results.push(
-                            NodeResult::failed(&upload_node_name, format!("Upload failed after {} attempts: {}", DEFAULT_UPLOAD_RETRIES, err_msg))
-                        );
+                        all_results.push(NodeResult::failed(
+                            &upload_node_name,
+                            format!(
+                                "Upload failed after {} attempts: {}",
+                                DEFAULT_UPLOAD_RETRIES, err_msg
+                            ),
+                        ));
                     }
                 }
             }

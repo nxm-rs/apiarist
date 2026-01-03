@@ -50,7 +50,9 @@ struct XorShiftRng {
 impl XorShiftRng {
     fn new(seed: u64) -> Self {
         // Ensure non-zero state
-        Self { state: if seed == 0 { 1 } else { seed } }
+        Self {
+            state: if seed == 0 { 1 } else { seed },
+        }
     }
 
     fn next(&mut self) -> u64 {
@@ -147,12 +149,11 @@ impl Check for RetrievalCheck {
         let mut retrieved_chunks = 0u64;
         let mut mismatches = 0u64;
 
-        // Get full nodes for uploads (beekeeper uses FullNodeNames)
-        // Note: boot nodes can't pushsync chunks properly, so use only true full nodes
         let full_nodes = ctx.full_nodes();
         if full_nodes.is_empty() {
             return Err(CheckError::Config(
-                "Retrieval check requires at least one full node (not bootnode) for uploads".to_string(),
+                "Retrieval check requires at least one full node (not bootnode) for uploads"
+                    .to_string(),
             ));
         }
         let actual_upload_count = upload_node_count.min(full_nodes.len()).max(1);
@@ -182,9 +183,10 @@ impl Check for RetrievalCheck {
                 }
                 Err(e) => {
                     error!(node = %upload_node_name, error = %e, "Failed to get/create batch");
-                    all_results.push(
-                        NodeResult::failed(&upload_node_name, format!("Failed to get/create batch: {}", e))
-                    );
+                    all_results.push(NodeResult::failed(
+                        &upload_node_name,
+                        format!("Failed to get/create batch: {}", e),
+                    ));
                     continue;
                 }
             };
@@ -204,9 +206,10 @@ impl Check for RetrievalCheck {
                     Ok(c) => c,
                     Err(e) => {
                         error!(error = %e, "Failed to create chunk");
-                        all_results.push(
-                            NodeResult::failed(&upload_node_name, format!("Failed to create chunk: {}", e))
-                        );
+                        all_results.push(NodeResult::failed(
+                            &upload_node_name,
+                            format!("Failed to create chunk: {}", e),
+                        ));
                         continue;
                     }
                 };
@@ -240,15 +243,16 @@ impl Check for RetrievalCheck {
                         all_results.push(
                             NodeResult::passed(&upload_node_name)
                                 .with_detail("action", "upload")
-                                .with_detail("reference", resp.reference.clone())
+                                .with_detail("reference", resp.reference.clone()),
                         );
                         resp.reference
                     }
                     Err(e) => {
                         error!(node = %upload_node_name, error = %e, "Upload failed");
-                        all_results.push(
-                            NodeResult::failed(&upload_node_name, format!("Upload failed: {}", e))
-                        );
+                        all_results.push(NodeResult::failed(
+                            &upload_node_name,
+                            format!("Upload failed: {}", e),
+                        ));
                         continue;
                     }
                 };
@@ -278,7 +282,7 @@ impl Check for RetrievalCheck {
                             all_results.push(
                                 NodeResult::passed(&download_node_name)
                                     .with_detail("action", "download")
-                                    .with_detail("reference", reference)
+                                    .with_detail("reference", reference),
                             );
                         } else {
                             mismatches += 1;
@@ -292,10 +296,14 @@ impl Check for RetrievalCheck {
                             all_results.push(
                                 NodeResult::failed(
                                     &download_node_name,
-                                    format!("Data mismatch: expected {} bytes, got {}", expected_data.len(), downloaded_data.len())
+                                    format!(
+                                        "Data mismatch: expected {} bytes, got {}",
+                                        expected_data.len(),
+                                        downloaded_data.len()
+                                    ),
                                 )
                                 .with_detail("action", "download")
-                                .with_detail("reference", reference)
+                                .with_detail("reference", reference),
                             );
                         }
                     }
@@ -307,9 +315,12 @@ impl Check for RetrievalCheck {
                             "Download failed"
                         );
                         all_results.push(
-                            NodeResult::failed(&download_node_name, format!("Download failed: {}", e))
-                                .with_detail("action", "download")
-                                .with_detail("reference", reference)
+                            NodeResult::failed(
+                                &download_node_name,
+                                format!("Download failed: {}", e),
+                            )
+                            .with_detail("action", "download")
+                            .with_detail("reference", reference),
                         );
                     }
                 }

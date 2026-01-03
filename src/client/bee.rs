@@ -76,8 +76,7 @@ impl BeeClient {
         let client = Client::builder()
             .timeout(DEFAULT_REQUEST_TIMEOUT)
             .connect_timeout(DEFAULT_CONNECT_TIMEOUT)
-            .build()
-            .map_err(reqwest::Error::from)?;
+            .build()?;
 
         Ok(Self {
             base_url,
@@ -654,10 +653,10 @@ impl BeeClient {
             }
 
             // Check if batch has remaining TTL (batchTTL == -1 means infinite, > 0 means remaining)
-            if let Some(ttl) = batch.batch_ttl {
-                if ttl == 0 {
-                    continue; // Expired
-                }
+            if let Some(ttl) = batch.batch_ttl
+                && ttl == 0
+            {
+                continue; // Expired
             }
 
             // Check utilization - batch still has capacity
@@ -745,17 +744,15 @@ impl BeeClient {
     /// Calculate batch amount based on TTL and current chain price
     async fn calculate_batch_amount(&self, opts: &BatchOptions) -> String {
         // Try to get chain state for price-based calculation
-        if let Ok(chain_state) = self.chain_state().await {
-            if let Some(price_str) = chain_state.current_price {
-                if let Ok(price) = price_str.parse::<u64>() {
-                    if price > 0 {
-                        // Amount = (TTL in blocks) * price
-                        // Assuming ~1 second block time (like beekeeper does)
-                        let amount = opts.ttl_secs * price;
-                        return amount.to_string();
-                    }
-                }
-            }
+        if let Ok(chain_state) = self.chain_state().await
+            && let Some(price_str) = chain_state.current_price
+            && let Ok(price) = price_str.parse::<u64>()
+            && price > 0
+        {
+            // Amount = (TTL in blocks) * price
+            // Assuming ~1 second block time (like beekeeper does)
+            let amount = opts.ttl_secs * price;
+            return amount.to_string();
         }
 
         // Fallback to configured amount

@@ -147,10 +147,10 @@ async fn create_batch_on_node(
             }
         }
         // Check TTL
-        if let Some(ttl) = batch.batch_ttl {
-            if ttl == 0 {
-                continue;
-            }
+        if let Some(ttl) = batch.batch_ttl
+            && ttl == 0
+        {
+            continue;
         }
         // Check capacity
         let capacity = 1u32 << (batch.depth.saturating_sub(batch.bucket_depth));

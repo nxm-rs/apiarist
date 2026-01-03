@@ -149,11 +149,7 @@ async fn run_checks(
     let data_checks = ["smoke", "pushsync", "retrieval"];
     let needs_batches = check_filter
         .map(|f| f.split(',').any(|c| data_checks.contains(&c.trim())))
-        .unwrap_or_else(|| {
-            data_checks
-                .iter()
-                .any(|c| config.is_check_enabled(c))
-        });
+        .unwrap_or_else(|| data_checks.iter().any(|c| config.is_check_enabled(c)));
 
     if needs_batches {
         tracing::info!("Preparing postage batches on full nodes...");

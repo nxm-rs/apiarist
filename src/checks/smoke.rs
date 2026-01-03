@@ -106,6 +106,7 @@ impl SmokeCheck {
     /// Like beekeeper, this uses exactly TWO full nodes: one uploader and one downloader.
     /// It does NOT download from all nodes - just the designated downloader.
     /// Includes retry logic matching beekeeper (3 retries with 10s wait).
+    #[allow(clippy::too_many_arguments)]
     async fn run_iteration(
         upload_node: &crate::client::BeeClient,
         download_node: &crate::client::BeeClient,
@@ -178,9 +179,12 @@ impl SmokeCheck {
                 let err_msg = last_upload_error.unwrap_or_else(|| "Unknown error".to_string());
                 error!(node = %upload_node_name, error = %err_msg, retries = retries, "Upload failed after all retries");
                 node_results.push(
-                    NodeResult::failed(&upload_node_name, format!("Upload failed after {retries} attempts: {err_msg}"))
-                        .with_detail("action", "upload")
-                        .with_detail("data_size", data_size),
+                    NodeResult::failed(
+                        &upload_node_name,
+                        format!("Upload failed after {retries} attempts: {err_msg}"),
+                    )
+                    .with_detail("action", "upload")
+                    .with_detail("data_size", data_size),
                 );
                 return stats;
             }
@@ -268,9 +272,12 @@ impl SmokeCheck {
             let err_msg = last_download_error.unwrap_or_else(|| "Unknown error".to_string());
             error!(node = %download_node_name, error = %err_msg, retries = retries, "Download failed after all retries");
             node_results.push(
-                NodeResult::failed(&download_node_name, format!("Download failed after {retries} attempts: {err_msg}"))
-                    .with_detail("action", "download")
-                    .with_detail("reference", &reference),
+                NodeResult::failed(
+                    &download_node_name,
+                    format!("Download failed after {retries} attempts: {err_msg}"),
+                )
+                .with_detail("action", "download")
+                .with_detail("reference", &reference),
             );
         }
 
