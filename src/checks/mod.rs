@@ -20,13 +20,17 @@
 mod fullconnectivity;
 mod peercount;
 mod pingpong;
+mod pushsync;
 pub mod registry;
+mod retrieval;
 mod smoke;
 mod traits;
 
 pub use fullconnectivity::FullconnectivityCheck;
 pub use peercount::PeercountCheck;
 pub use pingpong::PingpongCheck;
+pub use pushsync::PushsyncCheck;
 pub use registry::CHECKS;
+pub use retrieval::RetrievalCheck;
 pub use smoke::SmokeCheck;
 pub use traits::*;
