@@ -4,12 +4,23 @@
 //! Endpoints are based on the OpenAPI specification in `openapi/Swarm.yaml`.
 
 use reqwest::Client;
+use std::time::Duration;
 use thiserror::Error;
 use url::Url;
 
 use super::types::*;
 use crate::config::NodeType;
 use crate::utils::HasId;
+
+/// Default HTTP request timeout (60 seconds)
+/// Balances between failing fast and allowing time for network operations.
+/// Bee's internal RetrieveChunkTimeout is 30s per peer, but operations like
+/// upload may need to wait for pushsync which can take longer.
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Default connection timeout (30 seconds)
+/// Helps fail fast on network connectivity issues
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Errors that can occur when interacting with the Bee API
 #[derive(Debug, Error)]
@@ -62,7 +73,11 @@ impl BeeClient {
     /// * `api_url` - Base URL of the Bee API (e.g., "http://localhost:1633")
     pub fn new(api_url: &str) -> BeeResult<Self> {
         let base_url = Url::parse(api_url)?;
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(DEFAULT_REQUEST_TIMEOUT)
+            .connect_timeout(DEFAULT_CONNECT_TIMEOUT)
+            .build()
+            .map_err(reqwest::Error::from)?;
 
         Ok(Self {
             base_url,
@@ -450,11 +465,13 @@ impl BeeClient {
     /// * `amount` - Amount of BZZ per chunk (as string for big integers)
     /// * `depth` - Batch depth (log2 of max chunks, must be > 16)
     /// * `label` - Optional label for the batch
+    /// * `immutable` - Whether batch is immutable (default in bee is true)
     pub async fn create_stamp(
         &self,
         amount: &str,
         depth: u8,
         label: Option<&str>,
+        immutable: bool,
     ) -> BeeResult<BatchIdResponse> {
         let mut url = self.base_url.join(&format!("stamps/{amount}/{depth}"))?;
 
@@ -462,7 +479,13 @@ impl BeeClient {
             url.query_pairs_mut().append_pair("label", lbl);
         }
 
-        let response = self.client.post(url).send().await?;
+        // Bee defaults to immutable=true if header not provided
+        let response = self
+            .client
+            .post(url)
+            .header("Immutable", immutable.to_string())
+            .send()
+            .await?;
 
         if response.status().is_success() {
             Ok(response.json().await?)
@@ -552,6 +575,191 @@ impl BeeClient {
                 code: error.code,
             })
         }
+    }
+
+    // =========================================================================
+    // Chain State Endpoint
+    // OpenAPI: Swarm.yaml - /chainstate
+    // =========================================================================
+
+    /// Get chain state (current price, block number, etc.)
+    ///
+    /// OpenAPI: GET /chainstate
+    /// Returns: ChainState
+    pub async fn chain_state(&self) -> BeeResult<ChainState> {
+        let url = self.base_url.join("chainstate")?;
+        let response = self.client.get(url).send().await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    // =========================================================================
+    // Higher-Level Batch Operations
+    // =========================================================================
+
+    /// Get or create a mutable postage batch
+    ///
+    /// This mirrors beekeeper's GetOrCreateMutableBatch:
+    /// 1. Search for existing usable batch with matching label
+    /// 2. If found and has capacity, return it
+    /// 3. Otherwise, create a new batch
+    ///
+    /// # Arguments
+    /// * `opts` - Batch creation options (depth, label, ttl, fallback_amount)
+    ///
+    /// # Returns
+    /// * `Ok(batch_id)` - The batch ID to use for uploads
+    /// * `Err(_)` - If batch creation fails
+    pub async fn get_or_create_batch(&self, opts: &BatchOptions) -> BeeResult<String> {
+        use tracing::{debug, info};
+
+        let label = opts.label.as_deref();
+
+        // First, try to find an existing usable batch with matching label
+        let batches = self.list_stamps().await?;
+
+        for batch in batches.stamps {
+            // Skip if not usable
+            if !batch.usable {
+                continue;
+            }
+
+            // Skip immutable batches
+            if batch.immutable {
+                continue;
+            }
+
+            // Skip if exists flag is explicitly false
+            if batch.exists == Some(false) {
+                continue;
+            }
+
+            // If label specified, batch must match
+            if let Some(required_label) = label {
+                match &batch.label {
+                    Some(batch_label) if batch_label == required_label => {}
+                    _ => continue,
+                }
+            }
+
+            // Check if batch has remaining TTL (batchTTL == -1 means infinite, > 0 means remaining)
+            if let Some(ttl) = batch.batch_ttl {
+                if ttl == 0 {
+                    continue; // Expired
+                }
+            }
+
+            // Check utilization - batch still has capacity
+            // Capacity = 2^(depth - bucket_depth), utilization must be less
+            let capacity = 1u32 << (batch.depth.saturating_sub(batch.bucket_depth));
+            if batch.utilization >= capacity {
+                continue; // Full
+            }
+
+            debug!(
+                batch_id = %batch.batch_id,
+                label = ?batch.label,
+                utilization = batch.utilization,
+                "Found existing usable batch"
+            );
+            return Ok(batch.batch_id);
+        }
+
+        // No existing batch found, create a new one
+        info!("No existing usable batch found, creating new batch");
+
+        // Calculate amount based on TTL and current price
+        let amount = self.calculate_batch_amount(opts).await;
+
+        debug!(
+            amount = %amount,
+            depth = opts.depth,
+            label = ?opts.label,
+            "Creating new postage batch"
+        );
+
+        // Create mutable batch (immutable=false) like beekeeper does
+        let response = self
+            .create_stamp(&amount, opts.depth, opts.label.as_deref(), false)
+            .await?;
+
+        // Wait for batch to become usable (like beekeeper, which waits up to 900s)
+        // We use a shorter timeout since local devnets are faster
+        let batch_id = response.batch_id.clone();
+        let max_attempts = 120; // 2 minutes should be enough for local devnets
+        let mut batch_exists = false;
+
+        for attempt in 0..max_attempts {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+            match self.get_stamp(&batch_id).await {
+                Ok(batch) => {
+                    batch_exists = true;
+                    if batch.usable {
+                        info!(
+                            batch_id = %batch_id,
+                            attempts = attempt + 1,
+                            "Batch is now usable"
+                        );
+                        return Ok(batch_id);
+                    }
+                    debug!(attempt = attempt + 1, "Batch not yet usable, waiting...");
+                }
+                Err(e) => {
+                    debug!(attempt = attempt + 1, error = %e, "Error checking batch, retrying...");
+                }
+            }
+        }
+
+        // Like beekeeper, return an error if batch is not usable within timeout
+        if !batch_exists {
+            return Err(BeeError::Api {
+                message: format!(
+                    "Batch {} does not exist after {} seconds",
+                    batch_id, max_attempts
+                ),
+                code: None,
+            });
+        }
+
+        Err(BeeError::Api {
+            message: format!(
+                "Batch {} not usable within {} seconds timeout",
+                batch_id, max_attempts
+            ),
+            code: None,
+        })
+    }
+
+    /// Calculate batch amount based on TTL and current chain price
+    async fn calculate_batch_amount(&self, opts: &BatchOptions) -> String {
+        // Try to get chain state for price-based calculation
+        if let Ok(chain_state) = self.chain_state().await {
+            if let Some(price_str) = chain_state.current_price {
+                if let Ok(price) = price_str.parse::<u64>() {
+                    if price > 0 {
+                        // Amount = (TTL in blocks) * price
+                        // Assuming ~1 second block time (like beekeeper does)
+                        let amount = opts.ttl_secs * price;
+                        return amount.to_string();
+                    }
+                }
+            }
+        }
+
+        // Fallback to configured amount
+        opts.fallback_amount.clone()
     }
 }
 
