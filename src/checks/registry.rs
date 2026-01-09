@@ -20,7 +20,7 @@ use std::sync::Arc;
 use super::traits::Check;
 use super::{
     FullconnectivityCheck, PeercountCheck, PingpongCheck, PullsyncCheck, PushsyncCheck,
-    RetrievalCheck, SmokeCheck,
+    RetrievalCheck, SmokeCheck, SocCheck,
 };
 
 /// Global registry of all available checks
@@ -43,11 +43,11 @@ pub static CHECKS: Lazy<IndexMap<&'static str, Arc<dyn Check>>> = Lazy::new(|| {
     m.insert("retrieval", Arc::new(RetrievalCheck));
     // m.insert("fileretrieval", Arc::new(FileretrievalCheck));
 
-    // P2: Advanced features (TODO)
+    // P2: Advanced features
+    m.insert("soc", Arc::new(SocCheck));
     // m.insert("postage", Arc::new(PostageCheck));
     // m.insert("manifest", Arc::new(ManifestCheck));
     // m.insert("feed", Arc::new(FeedCheck));
-    // m.insert("soc", Arc::new(SocCheck));
     // m.insert("pss", Arc::new(PssCheck));
 
     // P3: Economic operations (TODO)
@@ -87,6 +87,11 @@ mod tests {
         assert!(CHECKS.contains_key("pushsync"));
         assert!(CHECKS.contains_key("pullsync"));
         assert!(CHECKS.contains_key("retrieval"));
+    }
+
+    #[test]
+    fn test_p2_checks_registered() {
+        assert!(CHECKS.contains_key("soc"));
     }
 
     #[test]

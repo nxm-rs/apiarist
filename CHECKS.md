@@ -16,7 +16,7 @@ This document tracks the implementation status of checks in apiarist compared to
 | settlements | ✅ | ❌ | Pending |
 | postage | ✅ | ❌ | Pending |
 | pss | ✅ | ❌ | Pending |
-| soc | ✅ | ❌ | Pending |
+| soc | ✅ | ✅ | Parity |
 | gsoc | ✅ | ❌ | Pending |
 | manifest | ✅ | ❌ | Pending |
 | feed | ✅ | ❌ | Pending |
@@ -100,6 +100,20 @@ Uploads chunks and verifies sync to the closest node via Kademlia routing.
 Uploads chunks from one node, downloads from a different node.
 
 **Options**: `chunks_per_node`, `upload_node_count`, `seed`
+
+### soc
+
+Tests Single Owner Chunk (SOC) upload and retrieval. SOCs are chunks with cryptographic
+ownership proofs, used for mutable content addressing (feeds, etc.).
+
+**What it tests:**
+1. Generate a secp256k1 private key
+2. Create a Content Addressed Chunk (CAC) with test payload
+3. Create a SOC by signing the ID and CAC address
+4. Upload the SOC to a node via `POST /soc/{owner}/{id}?sig={signature}`
+5. Download the chunk and verify the data matches
+
+**Options**: `timeout`, `batch_id`
 
 ### fullconnectivity
 

@@ -550,6 +550,56 @@ impl BeeClient {
     }
 
     // =========================================================================
+    // Single Owner Chunk (SOC) Endpoints
+    // OpenAPI: Swarm.yaml - /soc/{owner}/{id}
+    // =========================================================================
+
+    /// Upload a single owner chunk
+    ///
+    /// OpenAPI: POST /soc/{owner}/{id}?sig={signature}
+    /// Returns: ReferenceResponse with the SOC address
+    ///
+    /// # Arguments
+    /// * `owner` - Ethereum address of the SOC owner (hex string, 20 bytes)
+    /// * `id` - SOC identifier (hex string, 32 bytes)
+    /// * `signature` - ECDSA signature (hex string, 65 bytes)
+    /// * `data` - CAC data (span + payload)
+    /// * `batch_id` - Postage batch ID to use for upload
+    pub async fn upload_soc(
+        &self,
+        owner: &str,
+        id: &str,
+        signature: &str,
+        data: impl Into<Vec<u8>>,
+        batch_id: &str,
+    ) -> BeeResult<ReferenceResponse> {
+        let url = self
+            .base_url
+            .join(&format!("soc/{owner}/{id}?sig={signature}"))?;
+        let response = self
+            .client
+            .post(url)
+            .header("swarm-postage-batch-id", batch_id)
+            .header("content-type", "application/octet-stream")
+            .body(data.into())
+            .send()
+            .await?;
+
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            let error: ApiError = response.json().await.unwrap_or(ApiError {
+                message: Some("Unknown error".into()),
+                code: None,
+            });
+            Err(BeeError::Api {
+                message: error.message.unwrap_or_default(),
+                code: error.code,
+            })
+        }
+    }
+
+    // =========================================================================
     // Wallet Endpoint
     // OpenAPI: Swarm.yaml - /wallet
     // =========================================================================

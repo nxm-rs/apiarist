@@ -25,6 +25,7 @@ mod pushsync;
 pub mod registry;
 mod retrieval;
 mod smoke;
+mod soc;
 mod traits;
 
 pub use fullconnectivity::FullconnectivityCheck;
@@ -35,4 +36,5 @@ pub use pushsync::PushsyncCheck;
 pub use registry::CHECKS;
 pub use retrieval::RetrievalCheck;
 pub use smoke::SmokeCheck;
+pub use soc::SocCheck;
 pub use traits::*;

@@ -16,8 +16,15 @@ categories = ["development-tools::testing"]
 apiarist-testkit = { path = "crates/apiarist-testkit" }
 nectar-primitives = { git = "https://github.com/nxm-rs/nectar", features = ["serde"] }
 
+# Alloy crypto (for SOC signing)
+alloy-primitives = "1.1"
+alloy-signer = "1.0"
+alloy-signer-local = "1.0"
+
 # External dependencies
 anyhow = "1.0.100"
+bytes = "1.10"
+rand = "0.9"
 async-trait = "0.1.89"
 indexmap = "2.7"
 axum = "0.8.8"
