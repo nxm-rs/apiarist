@@ -20,6 +20,7 @@
 mod fullconnectivity;
 mod peercount;
 mod pingpong;
+mod pullsync;
 mod pushsync;
 pub mod registry;
 mod retrieval;
@@ -29,6 +30,7 @@ mod traits;
 pub use fullconnectivity::FullconnectivityCheck;
 pub use peercount::PeercountCheck;
 pub use pingpong::PingpongCheck;
+pub use pullsync::PullsyncCheck;
 pub use pushsync::PushsyncCheck;
 pub use registry::CHECKS;
 pub use retrieval::RetrievalCheck;

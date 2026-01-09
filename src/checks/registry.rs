@@ -19,7 +19,8 @@ use std::sync::Arc;
 
 use super::traits::Check;
 use super::{
-    FullconnectivityCheck, PeercountCheck, PingpongCheck, PushsyncCheck, RetrievalCheck, SmokeCheck,
+    FullconnectivityCheck, PeercountCheck, PingpongCheck, PullsyncCheck, PushsyncCheck,
+    RetrievalCheck, SmokeCheck,
 };
 
 /// Global registry of all available checks
@@ -38,6 +39,7 @@ pub static CHECKS: Lazy<IndexMap<&'static str, Arc<dyn Check>>> = Lazy::new(|| {
     // This prevents slow pushsync delays on unstable networks
     m.insert("smoke", Arc::new(SmokeCheck));
     m.insert("pushsync", Arc::new(PushsyncCheck));
+    m.insert("pullsync", Arc::new(PullsyncCheck));
     m.insert("retrieval", Arc::new(RetrievalCheck));
     // m.insert("fileretrieval", Arc::new(FileretrievalCheck));
 
@@ -83,6 +85,7 @@ mod tests {
     fn test_p1_checks_registered() {
         assert!(CHECKS.contains_key("smoke"));
         assert!(CHECKS.contains_key("pushsync"));
+        assert!(CHECKS.contains_key("pullsync"));
         assert!(CHECKS.contains_key("retrieval"));
     }
 

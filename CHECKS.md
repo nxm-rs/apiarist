@@ -32,7 +32,7 @@ This document tracks the implementation status of checks in apiarist compared to
 | datadurability | ✅ | ❌ | Pending |
 | longavailability | ✅ | ❌ | Pending |
 | networkavailability | ✅ | ❌ | Pending |
-| pullsync | ✅ | ❌ | Pending |
+| pullsync | ✅ | ✅ | Parity |
 
 ## Default Checks
 
@@ -42,6 +42,7 @@ The default checks for Kurtosis testing are:
 - `fullconnectivity` - All nodes can reach all other nodes
 - `smoke` - Upload/download sanity check
 - `pushsync` - Chunk sync to closest nodes
+- `pullsync` - Chunk replication to neighborhood nodes
 - `retrieval` - Chunk download from different nodes
 
 ## Semantic Differences
@@ -61,6 +62,24 @@ Not implemented. The check has fundamental design flaws:
 3. Redundant with fullconnectivity and pushsync checks
 
 ## Check Details
+
+### pullsync
+
+Tests the pull-sync wire protocol - the mechanism by which nodes actively pull chunks
+from their neighbors that fall within their storage responsibility.
+
+**What it tests:**
+1. Upload a chunk to one node
+2. Determine which nodes should store it based on Kademlia depth:
+   - A node stores a chunk if `proximity(chunk, node) >= node.depth`
+3. Verify the chunk exists on ALL nodes within their neighborhood
+4. Check that replication factor meets the threshold
+
+**Difference from pushsync:**
+- `pushsync`: Tests that chunks are PUSHED to the closest node during upload
+- `pullsync`: Tests that chunks are PULLED by all nodes in the neighborhood
+
+**Options**: `chunks_per_node`, `upload_node_count`, `seed`, `replication_factor_threshold`, `retries`, `retry_delay_ms`
 
 ### smoke
 
