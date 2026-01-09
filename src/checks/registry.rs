@@ -1,27 +1,44 @@
 //! Check registry
 //!
 //! Central registry of all available checks. New checks should be registered here.
+//!
+//! ## Check Ordering
+//!
+//! Checks are registered in a specific order to optimize test execution:
+//! 1. **Connectivity checks** run first (pingpong, peercount, fullconnectivity)
+//!    These verify the network is up before content operations.
+//! 2. **Content checks** run after connectivity is verified (smoke, pushsync, retrieval)
+//!    These require a stable network for reliable results.
+//!
+//! This ordering prevents slow pushsync delays when uploading chunks to an
+//! unstable network.
 
+use indexmap::IndexMap;
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::traits::Check;
-use super::{FullconnectivityCheck, PeercountCheck, PingpongCheck, SmokeCheck};
+use super::{
+    FullconnectivityCheck, PeercountCheck, PingpongCheck, PushsyncCheck, RetrievalCheck, SmokeCheck,
+};
 
 /// Global registry of all available checks
-pub static CHECKS: Lazy<HashMap<&'static str, Arc<dyn Check>>> = Lazy::new(|| {
-    let mut m: HashMap<&'static str, Arc<dyn Check>> = HashMap::new();
+///
+/// Uses IndexMap to preserve insertion order, ensuring checks run in a
+/// deterministic sequence (connectivity before content).
+pub static CHECKS: Lazy<IndexMap<&'static str, Arc<dyn Check>>> = Lazy::new(|| {
+    let mut m: IndexMap<&'static str, Arc<dyn Check>> = IndexMap::new();
 
-    // P0: Core Protocol checks
+    // P0: Core Protocol checks - run FIRST to verify network connectivity
     m.insert("pingpong", Arc::new(PingpongCheck));
     m.insert("peercount", Arc::new(PeercountCheck));
     m.insert("fullconnectivity", Arc::new(FullconnectivityCheck));
 
-    // P1: Content checks
+    // P1: Content checks - run AFTER connectivity is verified
+    // This prevents slow pushsync delays on unstable networks
     m.insert("smoke", Arc::new(SmokeCheck));
-    // m.insert("pushsync", Arc::new(PushsyncCheck));
-    // m.insert("retrieval", Arc::new(RetrievalCheck));
+    m.insert("pushsync", Arc::new(PushsyncCheck));
+    m.insert("retrieval", Arc::new(RetrievalCheck));
     // m.insert("fileretrieval", Arc::new(FileretrievalCheck));
 
     // P2: Advanced features (TODO)
@@ -65,6 +82,8 @@ mod tests {
     #[test]
     fn test_p1_checks_registered() {
         assert!(CHECKS.contains_key("smoke"));
+        assert!(CHECKS.contains_key("pushsync"));
+        assert!(CHECKS.contains_key("retrieval"));
     }
 
     #[test]

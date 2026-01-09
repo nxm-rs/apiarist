@@ -352,3 +352,49 @@ pub struct WalletBalance {
     #[serde(default)]
     pub wallet_address: Option<String>,
 }
+
+/// Chain state information
+/// OpenAPI: SwarmCommon.yaml#/components/schemas/ChainState
+/// Endpoint: GET /chainstate
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChainState {
+    /// Current chain tip block number
+    #[serde(default)]
+    pub chain_tip: Option<u64>,
+    /// Current synced block number
+    #[serde(default)]
+    pub block: Option<u64>,
+    /// Total amount of BZZ in postage stamps
+    #[serde(default)]
+    pub total_amount: Option<String>,
+    /// Current price per chunk per block
+    #[serde(default)]
+    pub current_price: Option<String>,
+}
+
+/// Options for batch creation
+#[derive(Debug, Clone)]
+pub struct BatchOptions {
+    /// Batch depth (log2 of max chunks, must be >= 17)
+    pub depth: u8,
+    /// Optional label for batch identification
+    pub label: Option<String>,
+    /// Target TTL in seconds (used to calculate amount if current_price available)
+    /// Default: 24 hours
+    pub ttl_secs: u64,
+    /// Fallback amount if price calculation not possible
+    /// Default: "100000000" (suitable for testing)
+    pub fallback_amount: String,
+}
+
+impl Default for BatchOptions {
+    fn default() -> Self {
+        Self {
+            depth: 17,
+            label: Some("apiarist".to_string()),
+            ttl_secs: 24 * 60 * 60, // 24 hours
+            fallback_amount: "100000000".to_string(),
+        }
+    }
+}

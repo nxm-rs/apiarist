@@ -21,6 +21,7 @@
 //! - `metrics` - Prometheus metrics
 
 pub mod api;
+pub mod batch;
 pub mod checks;
 pub mod client;
 pub mod config;
