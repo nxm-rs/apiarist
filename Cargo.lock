@@ -2286,7 +2286,7 @@ dependencies = [
 [[package]]
 name = "nectar-primitives"
 version = "0.1.0"
-source = "git+https://github.com/nxm-rs/nectar#d0d767004798b020a45af3a77a453e6282274d7b"
+source = "git+https://github.com/nxm-rs/nectar?rev=d0d767004798b020a45af3a77a453e6282274d7b#d0d767004798b020a45af3a77a453e6282274d7b"
 dependencies = [
  "alloy-primitives",
  "alloy-signer",
