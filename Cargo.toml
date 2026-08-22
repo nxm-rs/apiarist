@@ -14,7 +14,8 @@ categories = ["development-tools::testing"]
 [dependencies]
 # Internal crates
 apiarist-testkit = { path = "crates/apiarist-testkit" }
-nectar-primitives = { git = "https://github.com/nxm-rs/nectar", features = ["serde"] }
+# Pin nectar to a fixed revision; unpinned, the git dependency follows the default branch.
+nectar-primitives = { git = "https://github.com/nxm-rs/nectar", rev = "d0d767004798b020a45af3a77a453e6282274d7b", features = ["serde"] }
 
 # Alloy crypto (for SOC signing)
 alloy-primitives = "1.1"
